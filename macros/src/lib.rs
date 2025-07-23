@@ -8,8 +8,8 @@ use syn::parse_macro_input;
 use crate::symbol::Symbol;
 
 mod args;
-mod symbol;
 mod cargo;
+mod symbol;
 
 #[proc_macro]
 pub fn make_metric(args: TokenStream) -> TokenStream {
@@ -30,8 +30,8 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
 
     quote!(
         cortex_m::interrupt::free(|_| {
-            #[cfg_attr(target_os = "macos", unsafe(link_section = #section_for_macos))]
-            #[cfg_attr(not(target_os = "macos"), unsafe(link_section = #section))]
+            //#[cfg_attr(target_os = "macos", unsafe(link_section = #section_for_macos))]
+            //#[cfg_attr(not(target_os = "macos"), unsafe(link_section = #section))]
             #[unsafe(export_name = #sym_name)]
             static mut #name: (#ty, bool) =
                 (0, false);
@@ -45,7 +45,7 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
                 unsafe {
                     #name.1 = true;
                     #name.0 = #initial_value;
-                    Some(Metric::new(&mut #name.0))
+                    Some(::probe_plotter::Metric::new(&mut #name.0))
                 }
             }
         })

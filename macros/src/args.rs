@@ -1,9 +1,11 @@
+use proc_macro2::Span;
 use syn::{
-    Token,
+    LitStr, Token,
     parse::{self, Parse, ParseStream},
 };
 
 //FOO: i32 = 0, "x * 3.0"
+//FOO: i32 = 0 // defaults to "x"
 pub(crate) struct Args {
     pub(crate) name: syn::Ident,
     pub(crate) ty: syn::Ident,
@@ -13,20 +15,26 @@ pub(crate) struct Args {
 
 impl Parse for Args {
     fn parse(input: ParseStream) -> parse::Result<Self> {
+        let name = input.parse()?;
+        let _comma: Token![:] = input.parse()?;
+        let ty = input.parse()?;
+        let _comma: Token![=] = input.parse()?;
+        let initial_val = input.parse()?;
+
+        let comma: parse::Result<Token![,]> = input.parse();
+        let expression_string = input.parse();
+
+        let expression_string = match (comma, expression_string) {
+            (Ok(_), Ok(expr)) => expr,
+            (Ok(_), Err(e)) => return Err(e),
+            (Err(_), _) => LitStr::new("x", Span::mixed_site()),
+        };
+
         Ok(Self {
-            name: input.parse()?,
-            ty: {
-                let _comma: Token![:] = input.parse()?;
-                input.parse()?
-            },
-            initial_val: {
-                let _comma: Token![=] = input.parse()?;
-                input.parse()?
-            },
-            expression_string: {
-                let _comma: Token![,] = input.parse()?;
-                input.parse()?
-            },
+            name,
+            ty,
+            initial_val,
+            expression_string,
         })
     }
 }

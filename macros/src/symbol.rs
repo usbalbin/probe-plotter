@@ -49,7 +49,7 @@ impl Symbol {
 
 fn json_escape(string: &str) -> String {
     use std::fmt::Write;
-    
+
     let mut escaped = String::new();
     for c in string.chars() {
         match c {

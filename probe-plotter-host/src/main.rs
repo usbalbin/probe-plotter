@@ -1,7 +1,11 @@
-use std::collections::{BTreeMap, HashMap};
+use core::fmt;
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
 
 use object::{Object, ObjectSection, ObjectSymbol};
-use probe_rs::MemoryInterface;
+use probe_rs::{Core, MemoryInterface};
 use serde::Deserialize;
 use shunting::{MathContext, RPNExpr, ShuntingParser};
 
@@ -12,19 +16,17 @@ fn main() {
         .unwrap_or_else(|| "stm32g474retx".to_owned());
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
-    println!("core: {:?}", core.core_type());
+    //println!("core: {:?}", core.core_type());
 
-    let buffer = include_bytes!(
-        "/home/albin/my_projects/hw-half-bridge/firmware/target/thumbv7em-none-eabihf/release/minimal"
-    );
+    let buffer = include_bytes!("../../examples/simple/target/thumbv7em-none-eabihf/debug/simple");
     let binary = goblin::elf::Elf::parse(buffer).unwrap();
 
-    let s = binary
-        .syms
-        .iter()
-        .find(|sym| binary.strtab.get_at(sym.st_name) == Some("_SEGGER_RTT"))
-        .map(|sym| sym.st_value)
-        .unwrap();
+    /*    let s = binary
+    .syms
+    .iter()
+    .find(|sym| binary.strtab.get_at(sym.st_name) == Some("_SEGGER_RTT"))
+    .map(|sym| sym.st_value)
+    .unwrap();*/
     //let section = binary.section_headers.iter().find(|x| binary.strtab.get_at(x.sh_name) == Some(".defmt")).unwrap();
     for section in binary.section_headers.iter() {
         println!("{}", binary.strtab.get_at(section.sh_name).unwrap());
@@ -38,14 +40,11 @@ fn main() {
     let res = x.eval(&e).unwrap();
     println!("res: {}", res);
 
-    println!("s: {s:X}");
-
-    make_answer!();
+    //println!("s: {s:X}");
 
     //let a = &binary.strtab[s as _];
 
-    /*
-    println!("x: {:X}", core.read_word_32(s).unwrap());
+    /* println!("x: {:X}", core.read_word_32(s).unwrap());
     println!("x: {:X}", core.read_word_32(s + 4).unwrap());
     println!("x: {:X}", core.read_word_32(s + 8).unwrap());
     println!("x: {:X}", core.read_word_32(s + 12).unwrap());
@@ -57,10 +56,10 @@ fn main() {
             core.read_word_32(s + 8).unwrap(),
             core.read_word_32(s + 12).unwrap(),
         ])
-    };
+    };*/
 
-    println!("{:X?}", b);
-    println!("{}", String::from_utf8_lossy(&b));
+    //println!("{:X?}", b);
+    //println!("{}", String::from_utf8_lossy(&b));
 
     println!();
     println!();
@@ -70,14 +69,41 @@ fn main() {
         println!(
             "{}: {}",
             binary.strtab.get_at(sym.st_name).unwrap(),
-            sym.st_value,
-            sym.
+            sym.st_value
         );
     }
 
-    binary.*/
+    println!();
+    println!();
+    println!();
+    println!();
+    println!("-----------------------------------------------------------");
+    println!();
+
+    let mut metrics = parse(buffer);
+    for m in &metrics {
+        println!("{}: {}", m.name, m.address);
+    }
+
+    println!();
+    println!("---------------------Running---------------------------");
+    println!();
+
+    loop {
+        for m in &mut metrics {
+            let (x, s) = m.read(&mut core).unwrap();
+            if let Status::New = s {
+                println!("{}: {}", m.name, x);
+            } else {
+                std::thread::sleep(Duration::from_millis(1));
+            }
+        }
+    }
+
+    dbg!(metrics);
 }
 
+#[derive(Debug)]
 enum Type {
     I32,
 }
@@ -87,23 +113,48 @@ struct Metric {
     expr: RPNExpr,
     ty: Type,
     address: u64,
+    math_ctx: MathContext,
+    pub last_value: f64,
+}
+
+impl fmt::Debug for Metric {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Metric")
+            .field("name", &self.name)
+            .field("expr", &self.expr)
+            .field("ty", &self.ty)
+            .field("address", &self.address)
+            .finish()
+    }
+}
+
+enum Status {
+    SameAsLast,
+    New,
+}
+
+impl Metric {
+    pub fn read(&mut self, core: &mut Core) -> Result<(f64, Status), probe_rs::Error> {
+        let x = match self.ty {
+            Type::I32 => core.read_word_32(self.address)? as f64,
+        };
+
+        self.math_ctx.setvar("x", shunting::MathOp::Number(x));
+        let new = self.math_ctx.eval(&self.expr).unwrap();
+        let status = if new == self.last_value {
+            Status::SameAsLast
+        } else {
+            Status::New
+        };
+        self.last_value = new;
+        Ok((new, status))
+    }
 }
 
 // Most of this is taken from https://github.com/knurling-rs/defmt/blob/8e517f8d7224237893e39337a61de8ef98b341f2/decoder/src/elf2table/mod.rs and modified
 fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
     let elf = object::File::parse(elf_bytes).unwrap();
 
-    // NOTE: We need to make sure to return `Ok(None)`, not `Err`, when defmt is not in use.
-    // Otherwise probe-run won't work with apps that don't use defmt.
-
-    let defmt_section = elf.section_by_name(".defmt");
-
-    let defmt_section = match defmt_section {
-        None => return Vec::new(), // defmt is not used
-        Some(defmt_section) => defmt_section,
-    };
-    //defmt::info!()
-    // second pass to demangle symbols
     let mut v = Vec::new();
 
     for entry in elf.symbols() {
@@ -111,42 +162,26 @@ fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
             continue;
         };
 
-        if name.is_empty() {
-            // Skipping symbols with empty string names, as they may be added by
-            // `objcopy`, and breaks JSON demangling
-            continue;
-        }
+        println!("name: {name}");
 
-        if name == "$d" || name.starts_with("$d.") {
-            // Skip AArch64 mapping symbols
+        let Ok(sym) = Symbol::demangle(name) else {
             continue;
-        }
-
-        if name.starts_with("_defmt") || name.starts_with("__DEFMT_MARKER") {
-            // `_defmt_version_` is not a JSON encoded `defmt` symbol / log-message; skip it
-            // LLD and GNU LD behave differently here. LLD doesn't include `_defmt_version_`
-            // (defined in a linker script) in the `.defmt` section but GNU LD does.
-            continue;
-        }
-
-        if entry.section_index() != Some(defmt_section.index()) {
-            continue;
-        }
-
-        let sym = Symbol::demangle(name).unwrap();
-        assert_eq!(entry.size(), 4);
+        };
+        //assert_eq!(entry.size(), 4);
         assert_eq!(sym.ty, "i32");
 
         let expr = ShuntingParser::parse_str(&sym.expr).unwrap();
-        let x = MathContext::new();
-        x.setvar("x", shunting::MathOp::Number(0.0));
-        x.eval(&expr).expect("Use `x` as name for the value");
+        let math_ctx = MathContext::new();
+        math_ctx.setvar("x", shunting::MathOp::Number(0.0));
+        math_ctx.eval(&expr).expect("Use `x` as name for the value");
 
         v.push(Metric {
             name: sym.name,
             expr,
             ty: Type::I32,
             address: entry.address(),
+            last_value: f64::NAN,
+            math_ctx,
         });
     }
 
