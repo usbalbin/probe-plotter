@@ -1,10 +1,7 @@
 use core::fmt;
-use std::{
-    collections::{BTreeMap, HashMap},
-    time::Duration,
-};
+use std::time::Duration;
 
-use object::{Object, ObjectSection, ObjectSymbol};
+use object::{Object, ObjectSymbol};
 use probe_rs::{Core, MemoryInterface};
 use serde::Deserialize;
 use shunting::{MathContext, RPNExpr, ShuntingParser};
@@ -16,69 +13,8 @@ fn main() {
         .unwrap_or_else(|| "stm32g474retx".to_owned());
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
-    //println!("core: {:?}", core.core_type());
 
     let buffer = include_bytes!("../../examples/simple/target/thumbv7em-none-eabihf/debug/simple");
-    let binary = goblin::elf::Elf::parse(buffer).unwrap();
-
-    /*    let s = binary
-    .syms
-    .iter()
-    .find(|sym| binary.strtab.get_at(sym.st_name) == Some("_SEGGER_RTT"))
-    .map(|sym| sym.st_value)
-    .unwrap();*/
-    //let section = binary.section_headers.iter().find(|x| binary.strtab.get_at(x.sh_name) == Some(".defmt")).unwrap();
-    for section in binary.section_headers.iter() {
-        println!("{}", binary.strtab.get_at(section.sh_name).unwrap());
-    }
-
-    //defmt::info!();
-
-    let e = ShuntingParser::parse_str("2 * x").unwrap();
-    let x = MathContext::new();
-    x.setvar("x", shunting::MathOp::Number(3.0));
-    let res = x.eval(&e).unwrap();
-    println!("res: {}", res);
-
-    //println!("s: {s:X}");
-
-    //let a = &binary.strtab[s as _];
-
-    /* println!("x: {:X}", core.read_word_32(s).unwrap());
-    println!("x: {:X}", core.read_word_32(s + 4).unwrap());
-    println!("x: {:X}", core.read_word_32(s + 8).unwrap());
-    println!("x: {:X}", core.read_word_32(s + 12).unwrap());
-
-    let b: [u8; 16] = unsafe {
-        std::mem::transmute([
-            core.read_word_32(s).unwrap(),
-            core.read_word_32(s + 4).unwrap(),
-            core.read_word_32(s + 8).unwrap(),
-            core.read_word_32(s + 12).unwrap(),
-        ])
-    };*/
-
-    //println!("{:X?}", b);
-    //println!("{}", String::from_utf8_lossy(&b));
-
-    println!();
-    println!();
-    println!("Symbols");
-
-    for sym in &binary.syms {
-        println!(
-            "{}: {}",
-            binary.strtab.get_at(sym.st_name).unwrap(),
-            sym.st_value
-        );
-    }
-
-    println!();
-    println!();
-    println!();
-    println!();
-    println!("-----------------------------------------------------------");
-    println!();
 
     let mut metrics = parse(buffer);
     for m in &metrics {
@@ -99,8 +35,6 @@ fn main() {
             }
         }
     }
-
-    dbg!(metrics);
 }
 
 #[derive(Debug)]
@@ -167,6 +101,8 @@ fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
         let Ok(sym) = Symbol::demangle(name) else {
             continue;
         };
+
+        // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
         assert_eq!(sym.ty, "i32");
 

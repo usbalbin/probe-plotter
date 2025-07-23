@@ -1,5 +1,7 @@
 #![no_std]
 
+// TODO: Adjust size constraints for targets other than 32bit
+
 pub trait Metricable: Sized {}
 impl Metricable for i8 {}
 impl Metricable for i16 {}
@@ -7,6 +9,8 @@ impl Metricable for i32 {}
 impl Metricable for u8 {}
 impl Metricable for u16 {}
 impl Metricable for u32 {}
+
+// TODO: Add f32?
 
 pub use macros::make_metric;
 
@@ -30,6 +34,7 @@ impl<T> Metric<T> {
 
     pub fn set(&mut self, x: T) {
         unsafe {
+            // TODO: Is volatile the right thing to use here?
             (self.x as *mut T).write_volatile(x);
         }
     }

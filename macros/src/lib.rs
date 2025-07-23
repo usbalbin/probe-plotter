@@ -21,8 +21,6 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
         args.expression_string.value(),
     )
     .mangle();
-    let section = linker_section(false, &sym_name);
-    let section_for_macos = linker_section(true, &sym_name);
 
     let name = args.name;
     let ty = args.ty;
@@ -51,20 +49,6 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
         })
     )
     .into()
-}
-
-/// work around restrictions on length and allowed characters imposed by macos linker
-/// returns (note the comma character for macos):
-///   under macos: ".defmt," + 16 character hex digest of symbol's hash
-///   otherwise:   ".defmt." + prefix + symbol
-pub(crate) fn linker_section(for_macos: bool, symbol: &str) -> String {
-    let mut sub_section = format!(".{symbol}");
-
-    if for_macos {
-        sub_section = format!(",{:x}", hash(&sub_section));
-    }
-
-    format!(".defmt{sub_section}")
 }
 
 pub(crate) fn crate_local_disambiguator() -> u64 {
