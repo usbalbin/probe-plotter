@@ -25,11 +25,17 @@ fn main() {
     println!("---------------------Running---------------------------");
     println!();
 
+    let rec = rerun::RecordingStreamBuilder::new("probe-plotter")
+        .spawn()
+        .unwrap();
+
     loop {
         for m in &mut metrics {
             let (x, s) = m.read(&mut core).unwrap();
             if let Status::New = s {
                 println!("{}: {}", m.name, x);
+
+                rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
             } else {
                 std::thread::sleep(Duration::from_millis(1));
             }
