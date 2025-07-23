@@ -1,3 +1,5 @@
+// Based on defmt
+
 use proc_macro2::Span;
 use syn::{
     LitStr, Token,

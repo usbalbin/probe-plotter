@@ -1,3 +1,5 @@
+// Based on defmt
+
 use crate::cargo;
 
 pub struct Symbol {

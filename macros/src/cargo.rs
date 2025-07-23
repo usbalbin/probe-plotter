@@ -1,3 +1,5 @@
+// Based on defmt
+
 use std::env;
 
 pub(crate) fn package_name() -> String {

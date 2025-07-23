@@ -1,3 +1,5 @@
+// Based on defmt and cortex_m::singleton
+
 extern crate proc_macro;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
@@ -11,6 +13,19 @@ mod args;
 mod cargo;
 mod symbol;
 
+/// Create a Metric instance that will be shown in the probe-plotter utility's graph
+///
+/// ```
+/// make_metric!(NAME_AS_SHOWN_IN_GRAPH: DataType = defalt_value, "expression to convert from raw value (x) to the value to plot")
+/// ```
+///
+/// Note that similar to `cortex_m::singleton!`, this should only be called once per metric. The macro will only return Some() the first time, then None.
+///
+/// ```
+/// let mut metric_foo = probe_plotter::make_metric!(FOO: i32 = 0, "x * 3.0").unwrap();
+///
+/// metric_foo.set(42); // The value 42 will be available for the host after this call. The value will be plotted as x * 3 = 42 * 3 = 126
+/// ```
 #[proc_macro]
 pub fn make_metric(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as args::Args);
@@ -28,8 +43,6 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
 
     quote!(
         cortex_m::interrupt::free(|_| {
-            //#[cfg_attr(target_os = "macos", unsafe(link_section = #section_for_macos))]
-            //#[cfg_attr(not(target_os = "macos"), unsafe(link_section = #section))]
             #[unsafe(export_name = #sym_name)]
             static mut #name: (#ty, bool) =
                 (0, false);

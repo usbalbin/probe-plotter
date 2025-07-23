@@ -1,5 +1,5 @@
 use core::fmt;
-use std::time::Duration;
+use std::{fs::File, io::Read, time::Duration};
 
 use object::{Object, ObjectSymbol};
 use probe_rs::{Core, MemoryInterface};
@@ -7,16 +7,25 @@ use serde::Deserialize;
 use shunting::{MathContext, RPNExpr, ShuntingParser};
 
 fn main() {
-    let target = std::env::args()
+    let elf_path = std::env::args()
         .skip(1)
+        .next()
+        .expect("Usage: \nprobe-plotter /path/to/elf chip");
+
+    let target = std::env::args()
+        .skip(2)
         .next()
         .unwrap_or_else(|| "stm32g474retx".to_owned());
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
 
-    let buffer = include_bytes!("../../examples/simple/target/thumbv7em-none-eabihf/debug/simple");
+    let mut buffer = Vec::new();
+    std::fs::File::open(elf_path)
+        .unwrap()
+        .read_to_end(&mut buffer)
+        .unwrap();
 
-    let mut metrics = parse(buffer);
+    let mut metrics = parse(&buffer);
     for m in &metrics {
         println!("{}: {}", m.name, m.address);
     }
@@ -33,8 +42,6 @@ fn main() {
         for m in &mut metrics {
             let (x, s) = m.read(&mut core).unwrap();
             if let Status::New = s {
-                println!("{}: {}", m.name, x);
-
                 rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
             } else {
                 std::thread::sleep(Duration::from_millis(1));
