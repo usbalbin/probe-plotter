@@ -28,7 +28,7 @@ fn main() -> ! {
 ```
 
 ##### Prerequisits
-probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sure to that installed](https://rerun.io/docs/getting-started/installing-viewer#installing-the-viewer).
+probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sure to have that installed](https://rerun.io/docs/getting-started/installing-viewer#installing-the-viewer).
 
 ##### To run the tool
 
