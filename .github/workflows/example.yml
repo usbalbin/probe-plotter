@@ -1,0 +1,36 @@
+on:
+  pull_request:
+  merge_group:
+
+name: example-simple
+
+# Make sure CI fails on all warnings, including Clippy lints
+env:
+  RUSTFLAGS: "-Dwarnings"
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          target: thumbv7em-none-eabihf
+          override: true
+
+      - name: Format
+        working-directory: ./examples/simple
+        run: cargo fmt
+      - name: Regular build
+        working-directory: ./examples/simple
+        run: cargo check
+      - name: Clippy
+        working-directory: ./examples/simple
+        run: cargo clippy
