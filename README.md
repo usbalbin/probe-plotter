@@ -1,6 +1,9 @@
 # probe-plotter
 
-A set of tools to plot values from the target to graph in rerun with minimal performance impact
+A set of tools to plot values from the target to graph in rerun with minimal performance impact. This project is based on code from `defmt` and `cortex_m`'s `singleton` macro. It also uses rerun for visualization.
+
+* probe-plotter - The target side library
+* probe-plotter-tools - The host side application
 
 ```rust
 #![no_std]
@@ -24,7 +27,10 @@ fn main() -> ! {
 }
 ```
 
-##### To run the tool 
+##### Prerequisits
+probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sure to that installed](https://rerun.io/docs/getting-started/installing-viewer#installing-the-viewer).
+
+##### To run the tool
 
 ```
 cd probe-plotter-host
@@ -35,10 +41,11 @@ So for example plotting the example in examples/simple on a Nucleo-G474RE
 
 ```
 cd examples/simple
-cargo run # Let it flash and then cancel to let the target continue running in the background while giving up access to the probe
+cargo run # Let it flash and then cancel (Ctrl+C) to let the target continue running in the background while giving up access to the probe
 
 cd ../probe-plotter-tools
 cargo run ../examples/simple/target/thumbv7em-none-eabihf/debug/simple stm32g474retx
 # Rerun will open with a graph showing all created metrics objects
 ```
-<img width="2880" height="1920" alt="Screenshot_20250724_015307" src="https://github.com/user-attachments/assets/b0c0a13b-f218-421b-ae75-6e0767c2a458" />
+
+<img width="2880" height="1920" alt="Screenshot" src="https://github.com/user-attachments/assets/5f7f20c9-009d-42c7-9613-789ae26afe54" />
