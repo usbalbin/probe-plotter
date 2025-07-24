@@ -27,6 +27,9 @@ pub struct Metric<T> {
 ///
 /// Will create a metric which on the host side will be called `FOO` and it
 /// will be presented as 3 times the value set in metric_foo.set(x);
+///
+/// This library currently uses the `shunting` library for parsing the expression for the formula.
+/// Check the documentation for that lib for the syntax to use.
 impl<T> Metric<T> {
     pub const unsafe fn new(x: *mut T) -> Self {
         Metric { x }

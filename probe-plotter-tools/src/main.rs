@@ -52,7 +52,13 @@ fn main() {
 
 #[derive(Debug)]
 enum Type {
+    U8,
+    U16,
+    U32,
+    I8,
+    I16,
     I32,
+    F32,
 }
 
 struct Metric {
@@ -83,7 +89,15 @@ enum Status {
 impl Metric {
     pub fn read(&mut self, core: &mut Core) -> Result<(f64, Status), probe_rs::Error> {
         let x = match self.ty {
-            Type::I32 => core.read_word_32(self.address)? as f64,
+            Type::U8 => core.read_word_8(self.address)? as f64,
+            Type::U16 => core.read_word_16(self.address)? as f64,
+            Type::U32 => core.read_word_32(self.address)? as f64,
+
+            Type::I8 => core.read_word_8(self.address)? as i8 as f64,
+            Type::I16 => core.read_word_16(self.address)? as i16 as f64,
+            Type::I32 => core.read_word_32(self.address)? as i32 as f64,
+
+            Type::F32 => f32::from_bits(core.read_word_32(self.address)?) as f64,
         };
 
         self.math_ctx.setvar("x", shunting::MathOp::Number(x));
@@ -115,7 +129,21 @@ fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
 
         // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
-        assert_eq!(sym.ty, "i32");
+        let ty = match sym.ty.as_str() {
+            "u8" => Type::U8,
+            "u16" => Type::U16,
+            "u32" => Type::U32,
+
+            "i8" => Type::I8,
+            "i16" => Type::I16,
+            "i32" => Type::I32,
+
+            "f32" => Type::F32,
+            t => {
+                eprintln!("Invalid type: '{t}' for value '{name}'");
+                continue;
+            }
+        };
 
         let expr = ShuntingParser::parse_str(&sym.expr).unwrap();
         let math_ctx = MathContext::new();
@@ -125,7 +153,7 @@ fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
         v.push(Metric {
             name: sym.name,
             expr,
-            ty: Type::I32,
+            ty,
             address: entry.address(),
             last_value: f64::NAN,
             math_ctx,
