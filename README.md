@@ -38,7 +38,7 @@ So for example plotting the example in examples/simple on a Nucleo-G474RE
 cd examples/simple
 cargo run # Let it flash and then cancel to let the target continue running in the background while giving up access to the probe
 
-cd ../probe-plotter-host
+cd ../probe-plotter-tools
 cargo run ../examples/simple/target/thumbv7em-none-eabihf/debug/simple stm32g474retx
 # Rerun will open with a graph showing all created metrics objects
 ```

@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{fs::File, io::Read, time::Duration};
+use std::{io::Read, time::Duration};
 
 use object::{Object, ObjectSymbol};
 use probe_rs::{Core, MemoryInterface};
@@ -143,10 +143,10 @@ struct Symbol {
 }
 
 #[derive(Debug)]
-struct InvalidSymbolError(serde_json::Error);
+struct InvalidSymbolError;
 
 impl Symbol {
     pub fn demangle(raw: &str) -> Result<Self, InvalidSymbolError> {
-        serde_json::from_str(raw).map_err(|e| InvalidSymbolError(e))
+        serde_json::from_str(raw).map_err(|_| InvalidSymbolError)
     }
 }
