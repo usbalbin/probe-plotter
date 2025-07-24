@@ -109,8 +109,6 @@ fn parse(elf_bytes: &[u8]) -> Vec<Metric> {
             continue;
         };
 
-        println!("name: {name}");
-
         let Ok(sym) = Symbol::demangle(name) else {
             continue;
         };
