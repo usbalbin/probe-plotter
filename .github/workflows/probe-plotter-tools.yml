@@ -24,6 +24,11 @@ jobs:
           toolchain: ${{ matrix.rust }}
           override: true
 
+      - name: Install libudev (linux)
+        run: |
+          sudo apt update
+          sudo apt install -y libudev-dev
+
       - name: Format
         working-directory: ./probe-plotter-tools
         run: cargo fmt

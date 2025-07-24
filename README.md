@@ -30,7 +30,7 @@ fn main() -> ! {
 The formulas seen in the `make_metric` macro invocation are computed by the host and will thus have zero impact on the targets performance. The `set` method on the metrics object is simply a volatile store which is quite cheap. The host will then read that value using the debug probe at regular intervals and update the graph on any changes.
 
 ##### Prerequisits
-probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sure to have that installed](https://rerun.io/docs/getting-started/installing-viewer#installing-the-viewer).
+probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sure to have that installed](https://rerun.io/docs/getting-started/installing-viewer#installing-the-viewer). Also make sure to have libudev installed.
 
 ##### To run the tool
 
