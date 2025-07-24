@@ -31,6 +31,8 @@ pub struct Metric<T> {
 /// This library currently uses the `shunting` library for parsing the expression for the formula.
 /// Check the documentation for that lib for the syntax to use.
 impl<T> Metric<T> {
+    /// # Safety
+    /// Internal use only by [make_metric]
     pub const unsafe fn new(x: *mut T) -> Self {
         Metric { x }
     }
@@ -38,11 +40,11 @@ impl<T> Metric<T> {
     pub fn set(&mut self, x: T) {
         unsafe {
             // TODO: Is volatile the right thing to use here?
-            (self.x as *mut T).write_volatile(x);
+            self.x.write_volatile(x);
         }
     }
 
     pub fn get(&mut self) -> T {
-        unsafe { (self.x as *mut T).read_volatile() }
+        unsafe { self.x.read_volatile() }
     }
 }

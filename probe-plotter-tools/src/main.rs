@@ -8,13 +8,11 @@ use shunting::{MathContext, RPNExpr, ShuntingParser};
 
 fn main() {
     let elf_path = std::env::args()
-        .skip(1)
-        .next()
+        .nth(1)
         .expect("Usage: \nprobe-plotter /path/to/elf chip");
 
     let target = std::env::args()
-        .skip(2)
-        .next()
+        .nth(2)
         .unwrap_or_else(|| "stm32g474retx".to_owned());
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
