@@ -42,3 +42,4 @@ cd ../probe-plotter-host
 cargo run ../examples/simple/target/thumbv7em-none-eabihf/debug/simple stm32g474retx
 # Rerun will open with a graph showing all created metrics objects
 ```
+<img width="2880" height="1920" alt="Screenshot_20250724_015307" src="https://github.com/user-attachments/assets/b0c0a13b-f218-421b-ae75-6e0767c2a458" />
