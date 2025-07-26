@@ -1,0 +1,9 @@
+[package]
+name = "probe-plotter"
+version = "0.1.0"
+edition = "2024"
+publish = ["gitea"]
+
+[dependencies]
+cortex-m = "0.7.7"
+macros = { path = "../macros" }

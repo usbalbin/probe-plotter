@@ -1,0 +1,13 @@
+[package]
+name = "simple"
+version = "0.1.0"
+edition = "2024"
+publish = ["gitea"]
+
+[dependencies]
+cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.2"
+probe-plotter = { path = "../../probe-plotter" }
+panic-halt = "0.2.0"
+defmt = "1.0.1"
+defmt-rtt = "1.0.0"
