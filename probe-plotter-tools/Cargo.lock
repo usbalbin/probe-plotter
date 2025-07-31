@@ -4339,8 +4339,7 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 [[package]]
 name = "lexers"
 version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82de9bb5d9e8ff5e13532a45583ea972e220b8a6efef755daad1f285333a8afa"
+source = "git+https://github.com/usbalbin/tox?branch=add-ln#835b0b2598deb80583faee261798a8c4768bbc6a"
 
 [[package]]
 name = "lexical-core"
@@ -8717,8 +8716,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 [[package]]
 name = "shunting"
 version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6bc210d95d59fbf54a2849a956866f9ec11f8e2ca3595a6d3f94e8d5b4cd74f"
+source = "git+https://github.com/usbalbin/tox?branch=add-ln#835b0b2598deb80583faee261798a8c4768bbc6a"
 dependencies = [
  "lexers",
  "libm",
