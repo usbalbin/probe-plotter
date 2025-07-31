@@ -7,7 +7,7 @@ use proc_macro::{Span, TokenStream};
 use quote::quote;
 use syn::parse_macro_input;
 
-use crate::symbol::Symbol;
+use crate::symbol::{MetricsSymbol, SettingSymbol};
 
 mod args;
 mod cargo;
@@ -28,9 +28,9 @@ mod symbol;
 /// ```
 #[proc_macro]
 pub fn make_metric(args: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as args::Args);
+    let args = parse_macro_input!(args as args::MetricArgs);
 
-    let sym_name = Symbol::new(
+    let sym_name = MetricsSymbol::new(
         args.ty.to_string(),
         args.name.to_string(),
         args.expression_string.value(),
@@ -57,6 +57,58 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
                     #name.1 = true;
                     #name.0 = #initial_value;
                     Some(::probe_plotter::Metric::new(&mut #name.0))
+                }
+            }
+        })
+    )
+    .into()
+}
+
+/// Create a Setting instance that will be shown as a slider in the probe-plotter utility
+///
+/// ```
+/// make_setting!(NAME_AS_SHOWN_NEXT_TO_SLIDER: DataType = defalt_value, min_value..=max_value, step_size)
+/// ```
+///
+/// Note that similar to `cortex_m::singleton!`, this should only be called once per setting. The macro will only return Some() the first time, then None.
+///
+/// ```
+/// let mut setting_foo = probe_plotter::make_setting!(FOO: i32 = 0, 0..=10, 1.0).unwrap();
+///
+/// let value = setting_foo.get();
+/// ```
+#[proc_macro]
+pub fn make_setting(args: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as args::SettingArgs);
+
+    let sym_name = SettingSymbol::new(
+        args.ty.to_string(),
+        args.name.to_string(),
+        args.range_start.base10_parse().unwrap()..=args.range_end.base10_parse().unwrap(),
+        args.step_size.base10_parse().unwrap(),
+    )
+    .mangle();
+
+    let name = args.name;
+    let ty = args.ty;
+    let initial_value = args.initial_val;
+
+    quote!(
+        cortex_m::interrupt::free(|_| {
+            #[unsafe(export_name = #sym_name)]
+            static mut #name: (#ty, bool) =
+                (0, false);
+
+            #[allow(unsafe_code)]
+            let used = unsafe { #name.1 };
+            if used {
+                None
+            } else {
+                #[allow(unsafe_code)]
+                unsafe {
+                    #name.1 = true;
+                    #name.0 = #initial_value;
+                    Some(::probe_plotter::Setting::new(&mut #name.0))
                 }
             }
         })
