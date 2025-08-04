@@ -1,18 +1,16 @@
 // Based on defmt
 
 use syn::{
-    LitStr, RangeLimits, Token,
+    RangeLimits, Token,
     parse::{self, Parse, ParseStream},
     spanned::Spanned,
 };
 
-//FOO: i32 = 0, "x * 3.0"
-//FOO: i32 = 0 // defaults to "x"
+//FOO: i32 = 0
 pub(crate) struct MetricArgs {
     pub(crate) name: syn::Ident,
     pub(crate) ty: syn::Ident,
     pub(crate) initial_val: syn::Expr,
-    pub(crate) expression_string: syn::LitStr,
 }
 
 impl Parse for MetricArgs {
@@ -23,20 +21,10 @@ impl Parse for MetricArgs {
         let _comma: Token![=] = input.parse()?;
         let initial_val = input.parse()?;
 
-        let comma: parse::Result<Token![,]> = input.parse();
-        let expression_string = input.parse();
-
-        let expression_string = match (comma, expression_string) {
-            (Ok(_), Ok(expr)) => expr,
-            (Ok(_), Err(e)) => return Err(e),
-            (Err(_), _) => LitStr::new(&name.to_string(), name.span()),
-        };
-
         Ok(Self {
             name,
             ty,
             initial_val,
-            expression_string,
         })
     }
 }
@@ -96,6 +84,25 @@ impl Parse for SettingArgs {
             range_start: expr_to_float_lit(*range_start)?,
             range_end: expr_to_float_lit(*range_end)?,
             step_size,
+        })
+    }
+}
+
+//FOO = "x * 3.0"
+pub(crate) struct GraphArgs {
+    pub(crate) name: syn::Ident,
+    pub(crate) expression_string: syn::LitStr,
+}
+
+impl Parse for GraphArgs {
+    fn parse(input: ParseStream) -> parse::Result<Self> {
+        let name: syn::Ident = input.parse()?;
+        let _comma: Token![=] = input.parse()?;
+        let expression_string = input.parse()?;
+
+        Ok(Self {
+            name,
+            expression_string,
         })
     }
 }

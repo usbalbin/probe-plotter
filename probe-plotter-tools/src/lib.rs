@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod gui;
 pub mod metric;
 pub mod setting;
@@ -10,7 +11,7 @@ use probe_rs::{Core, MemoryInterface};
 use serde::Deserialize;
 use shunting::{MathContext, ShuntingParser};
 
-use crate::{metric::Metric, setting::Setting, symbol::Symbol};
+use crate::{graph::Graph, metric::Metric, setting::Setting, symbol::Symbol};
 
 pub fn read_value(core: &mut Core, address: u64, ty: Type) -> Result<f64, probe_rs::Error> {
     let x = match ty {
@@ -41,11 +42,12 @@ pub enum Type {
 }
 
 // Most of this is taken from https://github.com/knurling-rs/defmt/blob/8e517f8d7224237893e39337a61de8ef98b341f2/decoder/src/elf2table/mod.rs and modified
-pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>) {
+pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, Vec<Graph>) {
     let elf = object::File::parse(elf_bytes).unwrap();
 
     let mut metrics = Vec::new();
     let mut settings = Vec::new();
+    let mut graphs = Vec::new();
 
     for entry in elf.symbols() {
         let Ok(name) = entry.name() else {
@@ -59,19 +61,11 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>) {
         // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
         match sym {
-            Symbol::Metric { name, expr, ty } => {
-                let expr = ShuntingParser::parse_str(&expr).unwrap();
-                let math_ctx = MathContext::new();
-                math_ctx.setvar(&name, shunting::MathOp::Number(0.0));
-                math_ctx
-                    .eval(&expr)
-                    .expect("Use the metrics name as name for the value in the expression");
+            Symbol::Metric { name, ty } => {
                 metrics.push(Metric {
                     name,
-                    expr,
                     ty,
                     address: entry.address(),
-                    last_value: f64::NAN,
                 });
             }
             Symbol::Setting {
@@ -89,20 +83,32 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>) {
                     step_size,
                 });
             }
+            Symbol::Graph { name, expr } => {
+                let expr = ShuntingParser::parse_str(&expr).unwrap();
+                let math_ctx = MathContext::new();
+                math_ctx.setvar(&name, shunting::MathOp::Number(0.0));
+                math_ctx
+                    .eval(&expr)
+                    .expect("Use the metrics name as name for the value in the expression");
+
+                graphs.push(Graph {
+                    name,
+                    expr,
+                    last_value: f64::NAN,
+                })
+            }
         }
     }
 
-    (metrics, settings)
+    (metrics, settings, graphs)
 }
 
-pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>) {
+pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>, Vec<Graph>) {
     let mut buffer = Vec::new();
     std::fs::File::open(elf_path)
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    let (metrics, settings) = parse(&buffer);
-
-    (metrics, settings)
+    parse(&buffer)
 }

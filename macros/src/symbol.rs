@@ -18,33 +18,28 @@ pub struct MetricsSymbol {
     /// Variable name
     name: String,
 
-    /// Expression used to calculate the value to plot
-    expression_string: String,
-
     /// Crate name obtained via CARGO_CRATE_NAME (added since a Cargo package can contain many crates).
     crate_name: String,
 }
 
 impl MetricsSymbol {
-    pub fn new(ty: String, name: String, expr: String) -> Self {
+    pub fn new(ty: String, name: String) -> Self {
         Self {
             // `CARGO_PKG_NAME` is set to the invoking package's name.
             package: cargo::package_name(),
             disambiguator: super::crate_local_disambiguator(),
             ty,
             name,
-            expression_string: expr,
             crate_name: cargo::crate_name(),
         }
     }
 
     pub fn mangle(&self) -> String {
         format!(
-            r#"{{"type":"Metric","package":"{}","ty":"{}","name":"{}","expr":"{}","disambiguator":"{}","crate_name":"{}"}}"#,
+            r#"{{"type":"Metric","package":"{}","ty":"{}","name":"{}","disambiguator":"{}","crate_name":"{}"}}"#,
             json_escape(&self.package),
             json_escape(&self.ty),
             json_escape(&self.name),
-            json_escape(&self.expression_string),
             self.disambiguator,
             json_escape(&self.crate_name),
         )
@@ -98,6 +93,48 @@ impl SettingSymbol {
             self.range.start(),
             self.range.end(),
             self.step_size,
+            self.disambiguator,
+            json_escape(&self.crate_name),
+        )
+    }
+}
+
+pub struct GraphSymbol {
+    /// Name of the Cargo package in which the symbol is being instantiated. Used for avoiding
+    /// symbol name collisions.
+    package: String,
+
+    /// Unique identifier that disambiguates otherwise equivalent invocations in the same crate.
+    disambiguator: u64,
+
+    /// Variable name
+    name: String,
+
+    /// Expression used to calculate the value to plot
+    expression_string: String,
+
+    /// Crate name obtained via CARGO_CRATE_NAME (added since a Cargo package can contain many crates).
+    crate_name: String,
+}
+
+impl GraphSymbol {
+    pub fn new(name: String, expr: String) -> Self {
+        Self {
+            // `CARGO_PKG_NAME` is set to the invoking package's name.
+            package: cargo::package_name(),
+            disambiguator: super::crate_local_disambiguator(),
+            name,
+            expression_string: expr,
+            crate_name: cargo::crate_name(),
+        }
+    }
+
+    pub fn mangle(&self) -> String {
+        format!(
+            r#"{{"type":"Graph","package":"{}","name":"{}","expr":"{}","disambiguator":"{}","crate_name":"{}"}}"#,
+            json_escape(&self.package),
+            json_escape(&self.name),
+            json_escape(&self.expression_string),
             self.disambiguator,
             json_escape(&self.crate_name),
         )
