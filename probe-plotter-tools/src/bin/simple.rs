@@ -1,4 +1,4 @@
-use probe_plotter_tools::{metric::Status, parse_elf_file};
+use probe_plotter_tools::{graph::Status, parse_elf_file};
 use shunting::MathContext;
 use std::time::Duration;
 
@@ -14,7 +14,7 @@ fn main() {
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
 
-    let (mut metrics, _settings) = parse_elf_file(&elf_path);
+    let (mut metrics, _settings, mut graphs) = parse_elf_file(&elf_path);
     for m in &metrics {
         println!("{}: {}", m.name, m.address);
     }
@@ -31,9 +31,12 @@ fn main() {
     loop {
         for m in &mut metrics {
             m.read(&mut core, &mut math_ctx).unwrap();
-            let (x, s) = m.compute(&mut math_ctx);
+        }
+
+        for g in &graphs {
+            let (x, s) = g.compute(&mut math_ctx);
             if let Status::New = s {
-                rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
+                rec.log(g.name.clone(), &rerun::Scalars::single(x)).unwrap();
             } else {
                 std::thread::sleep(Duration::from_millis(1));
             }

@@ -2,7 +2,7 @@
 
 use std::{sync::mpsc, thread, time::Duration};
 
-use probe_plotter_tools::{gui::MyApp, metric::Status, parse_elf_file, setting::Setting};
+use probe_plotter_tools::{graph::Status, gui::MyApp, parse_elf_file, setting::Setting};
 use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_log, re_viewer, tokio};
 use shunting::MathContext;
 
@@ -16,7 +16,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(2)
         .unwrap_or_else(|| "stm32g474retx".to_owned());
 
-    let (mut metrics, mut settings) = parse_elf_file(&elf_path);
+    let (mut metrics, mut settings, mut graphs) = parse_elf_file(&elf_path);
+
+    dbg!(&metrics, &settings, &graphs);
 
     let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
 
@@ -65,20 +67,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial_settings_sender.send(settings).unwrap();
 
         let mut math_ctx = MathContext::new();
+        let mut was_any_change = false;
         loop {
             for mut setting in settings_update_receiver.try_iter() {
-                setting.write(setting.value, &mut core).unwrap();
+                setting
+                    .write(setting.value, &mut core, &mut math_ctx)
+                    .unwrap();
             }
 
             for m in &mut metrics {
                 m.read(&mut core, &mut math_ctx).unwrap();
-                let (x, s) = m.compute(&mut math_ctx);
-                if let Status::New = s {
-                    rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
-                } else {
-                    std::thread::sleep(Duration::from_millis(1));
+            }
+
+            let mut is_any_change = false;
+            for g in &mut graphs {
+                let (x, s) = g.compute(&math_ctx);
+                if s == Status::New || was_any_change {
+                    // Force update of all values if one was changed last time
+                    rec.log(g.name.clone(), &rerun::Scalars::single(x)).unwrap();
+                    if s == Status::New {
+                        is_any_change = true;
+                    }
                 }
             }
+            was_any_change = is_any_change;
+            std::thread::sleep(Duration::from_millis(1));
         }
     });
 

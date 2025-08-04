@@ -9,9 +9,6 @@ pub enum Symbol {
     Metric {
         name: String,
 
-        /// Exproession to apply before plotting
-        expr: String,
-
         /// Type of value, i32, u8 etc.
         ty: Type,
     },
@@ -27,28 +24,19 @@ pub enum Symbol {
         /// Step size
         step_size: f64,
     },
-}
+    Graph {
+        name: String,
 
-impl Symbol {
-    pub fn name(&self) -> &str {
-        match self {
-            Symbol::Metric { name, .. } => name,
-            Symbol::Setting { name, .. } => name,
-        }
-    }
-    pub fn ty(&self) -> Type {
-        match self {
-            Symbol::Metric { ty, .. } => *ty,
-            Symbol::Setting { ty, .. } => *ty,
-        }
-    }
+        /// Exproession to apply before plotting
+        expr: String,
+    },
 }
 
 #[derive(Debug)]
 pub struct InvalidSymbolError;
 
 impl Symbol {
-    pub fn demangle(raw: &str) -> Result<Self, InvalidSymbolError> {
-        serde_json::from_str(raw).map_err(|_| InvalidSymbolError)
+    pub fn demangle(raw: &str) -> Result<Self, serde_json::Error> {
+        serde_json::from_str(raw)
     }
 }

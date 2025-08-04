@@ -1,6 +1,7 @@
 use std::ops::RangeInclusive;
 
 use probe_rs::MemoryInterface;
+use shunting::MathContext;
 
 use crate::{Type, read_value};
 
@@ -20,7 +21,13 @@ impl Setting {
         Ok(())
     }
 
-    pub fn write(&mut self, x: f64, core: &mut probe_rs::Core) -> Result<(), probe_rs::Error> {
+    pub fn write(
+        &mut self,
+        x: f64,
+        core: &mut probe_rs::Core,
+        math_ctx: &mut MathContext,
+    ) -> Result<(), probe_rs::Error> {
+        math_ctx.setvar(&self.name, shunting::MathOp::Number(x));
         match self.ty {
             Type::u8 => core.write_word_8(
                 self.address,
