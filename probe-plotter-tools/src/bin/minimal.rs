@@ -1,3 +1,5 @@
+// Connect to the regular rerun viewer. This does not support Settings, only Metrics
+
 use probe_plotter_tools::{metric::Status, parse_elf_file};
 use shunting::MathContext;
 use std::time::Duration;
