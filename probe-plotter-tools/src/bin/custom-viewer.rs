@@ -1,27 +1,42 @@
 // A custom rerun viewer capable of showing and editing settings
 
-use std::{sync::mpsc, thread, time::Duration};
-
-use probe_plotter_tools::{gui::MyApp, metric::Status, parse_elf_file, setting::Setting};
-use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_log, re_viewer, tokio};
-use shunting::MathContext;
+use probe_plotter_tools::{gui::MyApp, parse, probe_background_thread, setting::Setting};
+use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_viewer, tokio};
+use std::{env, io::Read, sync::mpsc, thread, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let elf_path = std::env::args()
-        .nth(1)
-        .expect("Usage: \nprobe-plotter /path/to/elf chip");
+    let help = "Usage: \nprobe-plotter /path/to/elf chip update_rate";
 
-    let target = std::env::args()
+    let elf_path = env::args()
+        .nth(1)
+        .expect("Usage: \nprobe-plotter /path/to/elf chip update_rate");
+
+    let target = env::args()
         .nth(2)
         .unwrap_or_else(|| "stm32g474retx".to_owned());
 
-    let (mut metrics, mut settings) = parse_elf_file(&elf_path);
+    let update_rate = env::args()
+        .nth(2)
+        .map(|s| {
+            Duration::from_millis(
+                s.parse()
+                    .unwrap_or_else(|_| panic!("Invalid update_rate\n\n{help}")),
+            )
+        })
+        .unwrap_or_else(|| Duration::from_millis(10));
+
+    let mut elf_bytes = Vec::new();
+    std::fs::File::open(elf_path)
+        .unwrap()
+        .read_to_end(&mut elf_bytes)
+        .unwrap();
+
+    let (metrics, settings) = parse(&elf_bytes);
 
     let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
 
     // Direct calls using the `log` crate to stderr. Control with `RUST_LOG=debug` etc.
-    re_log::setup_logging();
 
     // Install handlers for panics and crashes that prints to stderr and send
     // them to Rerun analytics (if the `analytics` feature is on in `Cargo.toml`).
@@ -49,37 +64,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // probe-thread
     thread::spawn(move || {
-        let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
-        let mut core = session.core(0).unwrap();
-
-        let rec = rerun::RecordingStreamBuilder::new("probe-plotter")
-            .spawn()
-            .unwrap();
-
-        // Load initial values from device
-        for setting in &mut settings {
-            setting.read(&mut core).unwrap();
-        }
-
-        // Send initial settings back to main thread
-        initial_settings_sender.send(settings).unwrap();
-
-        let mut math_ctx = MathContext::new();
-        loop {
-            for mut setting in settings_update_receiver.try_iter() {
-                setting.write(setting.value, &mut core).unwrap();
-            }
-
-            for m in &mut metrics {
-                m.read(&mut core, &mut math_ctx).unwrap();
-                let (x, s) = m.compute(&mut math_ctx);
-                if let Status::New = s {
-                    rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
-                } else {
-                    std::thread::sleep(Duration::from_millis(1));
-                }
-            }
-        }
+        probe_background_thread(
+            update_rate,
+            &target,
+            &elf_bytes,
+            settings,
+            metrics,
+            settings_update_receiver,
+            initial_settings_sender,
+        )
     });
 
     // Receive initial settings from to probe-thread thread
