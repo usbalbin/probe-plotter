@@ -6,18 +6,16 @@ use std::{env, io::Read, sync::mpsc, thread, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let help = "Usage: \nprobe-plotter /path/to/elf chip update_rate";
+    let help = "Usage: \nprobe-plotter /path/to/elf [chip] [update_rate_ms=10] [channel_mode=no change]";
 
-    let elf_path = env::args()
-        .nth(1)
-        .expect("Usage: \nprobe-plotter /path/to/elf chip update_rate");
+    let elf_path = env::args().nth(1).expect(help);
 
     let target = env::args()
         .nth(2)
         .unwrap_or_else(|| "stm32g474retx".to_owned());
 
     let update_rate = env::args()
-        .nth(2)
+        .nth(3)
         .map(|s| {
             Duration::from_millis(
                 s.parse()
@@ -25,6 +23,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         })
         .unwrap_or_else(|| Duration::from_millis(10));
+
+    let channel_mode = env::args()
+        .nth(4)
+        .map(|s| match s.as_str() {
+            "NoBlockSkip" => probe_rs::rtt::ChannelMode::NoBlockSkip,
+            "NoBlockTrim" => probe_rs::rtt::ChannelMode::NoBlockTrim,
+            "BlockIfFull" => probe_rs::rtt::ChannelMode::BlockIfFull,
+            _ => panic!("Invalid channel_mode. Select one of\n* NoBlockSkip\n* NoBlockTrim\n* BlockIfFull\n\n{help}"),
+        });
 
     let mut elf_bytes = Vec::new();
     std::fs::File::open(elf_path)
@@ -66,6 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     thread::spawn(move || {
         probe_background_thread(
             update_rate,
+            channel_mode,
             &target,
             &elf_bytes,
             settings,
