@@ -8,7 +8,10 @@ use std::{io::Read, sync::mpsc, time::Duration};
 use defmt_decoder::DecodeError;
 use defmt_parser::Level;
 use object::{Object, ObjectSymbol};
-use probe_rs::{Core, MemoryInterface, rtt::Rtt};
+use probe_rs::{
+    Core, MemoryInterface,
+    rtt::{ChannelMode, Rtt},
+};
 use rerun::TextLogLevel;
 use serde::Deserialize;
 use shunting::{MathContext, ShuntingParser};
@@ -118,8 +121,10 @@ pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>) {
 /// * reading metrics
 /// * reading initial values for settings
 /// * writing updated settings
+#[allow(clippy::too_many_arguments)]
 pub fn probe_background_thread(
     update_rate: Duration,
+    channel_mode: Option<ChannelMode>,
     target: &str,
     elf_bytes: &[u8],
     mut settings: Vec<Setting>,
@@ -195,6 +200,12 @@ pub fn probe_background_thread(
             None
         }
     };
+
+    if let Some(channel_mode) = channel_mode {
+        for ch in &mut rtt.up_channels {
+            ch.set_mode(&mut core, channel_mode).unwrap();
+        }
+    }
 
     let mut decoders: Vec<_> = rtt
         .up_channels
