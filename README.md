@@ -10,18 +10,23 @@ A set of tools to plot values from the target to graph in rerun with minimal per
 #![no_main]
 
 use cortex_m_rt::entry;
+
+use defmt_rtt as _;
+use panic_halt as _;
 use probe_plotter::{make_metric, make_setting};
 
 #[entry]
 fn main() -> ! {
+    defmt::println!("Running...");
     let mut sawtooth = make_metric!(SAWTOOTH: i32 = 42, "(SAWTOOTH / 10) % 100").unwrap();
+    defmt::println!("sawtooth initialized to: {}", sawtooth.get());
     let mut sine = make_metric!(SINE: i32 = 42, "100 * sin(2 * pi * SINE / 4000)").unwrap();
 
     let mut setting_roundtrip =
         make_metric!(SETTING_ROUNDTRIP: i8 = 0, "SETTING_ROUNDTRIP").unwrap();
 
     // Allow values -1..=7, step by 2, so {-1, 1, 3, 5, 7}
-    let mut setting = make_setting!(SETTING: i8 = 42, -1..=7, 2).unwrap();
+    let mut setting = make_setting!(SETTING: i8 = 5, -1..=7, 2).unwrap();
 
     loop {
         for i in 0..i32::MAX {
@@ -32,7 +37,6 @@ fn main() -> ! {
         }
     }
 }
-
 ```
 
 The formulas seen in the `make_metric` macro invocation are computed by the host and will thus have zero impact on the targets performance. The `set` method on the metrics object is simply a volatile store which is quite cheap. The host will then read that value using the debug probe at regular intervals and update the graph on any changes.
@@ -54,8 +58,8 @@ cd examples/simple
 cargo run # Let it flash and then cancel (Ctrl+C) to let the target continue running in the background while giving up access to the probe
 
 cd ../probe-plotter-tools
-cargo run ../examples/simple/target/thumbv7em-none-eabihf/debug/simple stm32g474retx
-# Rerun will open with a graph showing all created metrics objects
+cargo run --bin custom-viewer ../examples/simple/target/thumbv7em-none-eabihf/debug/simple stm32g474retx
+# Rerun will open with a graph showing all created metrics objects and a panel with settings at the right hand side
 ```
 
-<img width="2050" height="1166" alt="image" src="https://github.com/user-attachments/assets/dcdced90-9130-449f-ae0e-22a92a3dd409" />
+<img width="2880" height="1920" alt="image" src="https://github.com/user-attachments/assets/8cf4055f-e85b-4c43-8184-7bee24955829" />
