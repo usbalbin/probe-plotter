@@ -48,7 +48,7 @@ probe-plotter uses the Rerun viewer for visualizing the graphs. Please [make sur
 
 ```
 cd probe-plotter-host
-cargo run /path/to/elf chip_name
+cargo run --bin custom-viewer /path/to/elf chip_name
 ```
 
 So for example plotting the example in examples/simple on a Nucleo-G474RE
