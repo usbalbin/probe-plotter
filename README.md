@@ -1,6 +1,6 @@
 # probe-plotter
 
-A set of tools to plot values from the target to graph in rerun with minimal performance impact. This project is based on code from `defmt` and `cortex_m`'s `singleton` macro. It also uses rerun for visualization.
+A set of tools to plot values from the target to graph in rerun with minimal performance impact. This project is based on code from `probe-rs`, `defmt` and `cortex_m`'s `singleton` macro. It also uses rerun for visualization.
 
 * probe-plotter - The target side library
 * probe-plotter-tools - The host side application
