@@ -63,3 +63,25 @@ cargo run --bin custom-viewer ../examples/simple/target/thumbv7em-none-eabihf/de
 ```
 
 <img width="2880" height="1920" alt="image" src="https://github.com/user-attachments/assets/8cf4055f-e85b-4c43-8184-7bee24955829" />
+
+## Acknowledgements
+
+This would never have been possible without the help of the following projects. Thank you!
+
+Lots of the macro code is based on code from [defmt](https://github.com/knurling-rs/defmt) and the singleton macro from [cortex-m](https://github.com/rust-embedded/cortex-m). The code for finding and decoding elf symbols is based on defmt and [probe-rs](https://github.com/probe-rs/probe-rs). The custom viewer is based on an example from [rerun](https://github.com/rerun-io/rerun).
+
+## License
+
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or
+  http://www.apache.org/licenses/LICENSE-2.0)
+- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
+dual licensed as above, without any additional terms or conditions.
