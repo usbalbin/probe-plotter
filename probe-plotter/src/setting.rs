@@ -6,6 +6,14 @@ pub struct Setting<T: Metricable> {
     x: *mut T,
 }
 
+// Safety: No one besides us and the debug probe has the raw pointer, so we can safely transfer
+// Setting to another thread / execution context if T can be safely transferred.
+unsafe impl<T> Send for Setting<T> where T: Send + Metricable {}
+
+// Safety: We only allow mutability through exclusive references so there is no risk
+// in having multiple shared references to this value across threads/execution contexts
+unsafe impl<T> Sync for Setting<T> where T: Sync + Metricable {}
+
 /// Create using [make_setting]
 ///
 /// ```
