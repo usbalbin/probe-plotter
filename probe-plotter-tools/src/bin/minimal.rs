@@ -16,7 +16,7 @@ fn main() {
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
 
-    let (mut metrics, _settings) = parse_elf_file(&elf_path);
+    let (mut metrics, _settings, _) = parse_elf_file(&elf_path);
     for m in &metrics {
         println!("{}: {}", m.name, m.address);
     }
