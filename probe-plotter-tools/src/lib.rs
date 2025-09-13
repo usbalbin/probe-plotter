@@ -10,7 +10,7 @@ use defmt_parser::Level;
 use object::{Object, ObjectSymbol};
 use probe_rs::{
     Core, MemoryInterface,
-    rtt::{ChannelMode, Rtt},
+    rtt::{self, ChannelMode, Rtt},
 };
 use rerun::TextLogLevel;
 use serde::Deserialize;
@@ -47,16 +47,23 @@ pub enum Type {
 }
 
 // Most of this is taken from https://github.com/knurling-rs/defmt/blob/8e517f8d7224237893e39337a61de8ef98b341f2/decoder/src/elf2table/mod.rs and modified
-pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>) {
+pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
     let elf = object::File::parse(elf_bytes).unwrap();
 
     let mut metrics = Vec::new();
     let mut settings = Vec::new();
 
+    let mut scan_region = rtt::ScanRegion::Ram;
+
     for entry in elf.symbols() {
         let Ok(name) = entry.name() else {
             continue;
         };
+
+        if name == "_SEGGER_RTT" {
+            scan_region = rtt::ScanRegion::Exact(entry.address());
+            continue;
+        }
 
         let Ok(sym) = Symbol::demangle(name) else {
             continue;
@@ -98,20 +105,18 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>) {
         }
     }
 
-    (metrics, settings)
+    (metrics, settings, scan_region)
 }
 
 /// Parse elf file into a set of Metrics and Settings
-pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>) {
+pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
     let mut buffer = Vec::new();
     std::fs::File::open(elf_path)
         .unwrap()
         .read_to_end(&mut buffer)
         .unwrap();
 
-    let (metrics, settings) = parse(&buffer);
-
-    (metrics, settings)
+    parse(&buffer)
 }
 
 /// A background task which communicates with the probe
@@ -129,12 +134,13 @@ pub fn probe_background_thread(
     elf_bytes: &[u8],
     mut settings: Vec<Setting>,
     mut metrics: Vec<Metric>,
+    scan_region: rtt::ScanRegion,
     settings_update_receiver: mpsc::Receiver<Setting>,
     initial_settings_sender: mpsc::Sender<Vec<Setting>>,
 ) {
     let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
     let mut core = session.core(0).unwrap();
-    let mut rtt = Rtt::attach(&mut core).unwrap();
+    let mut rtt = Rtt::attach_region(&mut core, &scan_region).unwrap();
     let table = defmt_decoder::Table::parse(elf_bytes).unwrap().unwrap();
 
     // TODO: Get this to work

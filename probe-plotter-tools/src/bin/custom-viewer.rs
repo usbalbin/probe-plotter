@@ -6,7 +6,8 @@ use std::{env, io::Read, sync::mpsc, thread, time::Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let help = "Usage: \nprobe-plotter /path/to/elf [chip] [update_rate_ms=10] [channel_mode=no change]";
+    let help =
+        "Usage: \nprobe-plotter /path/to/elf [chip] [update_rate_ms=10] [channel_mode=no change]";
 
     let elf_path = env::args().nth(1).expect(help);
 
@@ -39,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .read_to_end(&mut elf_bytes)
         .unwrap();
 
-    let (metrics, settings) = parse(&elf_bytes);
+    let (metrics, settings, scan_region) = parse(&elf_bytes);
 
     let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
 
@@ -78,6 +79,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             &elf_bytes,
             settings,
             metrics,
+            scan_region,
             settings_update_receiver,
             initial_settings_sender,
         )
