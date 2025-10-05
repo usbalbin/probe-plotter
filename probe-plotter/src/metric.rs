@@ -1,15 +1,16 @@
 // TODO: Adjust size constraints for targets other than 32bit
 
-pub trait Metricable: Sized {}
-impl Metricable for i8 {}
-impl Metricable for i16 {}
-impl Metricable for i32 {}
-impl Metricable for u8 {}
-impl Metricable for u16 {}
-impl Metricable for u32 {}
-impl Metricable for f32 {}
+pub unsafe trait Metricable: Sized {}
+unsafe impl Metricable for i8 {}
+unsafe impl Metricable for i16 {}
+unsafe impl Metricable for i32 {}
+unsafe impl Metricable for u8 {}
+unsafe impl Metricable for u16 {}
+unsafe impl Metricable for u32 {}
+unsafe impl Metricable for f32 {}
 
 pub use macros::make_metric;
+pub use macros::Metricable;
 
 pub struct Metric<T: Metricable> {
     x: *mut T,

@@ -128,3 +128,24 @@ fn hash(string: &str) -> u64 {
     string.hash(&mut hasher);
     hasher.finish()
 }
+
+#[proc_macro_derive(Metricable)]
+pub fn impl_metricable(input: TokenStream) -> TokenStream {
+    // TODO: Probably require repr(C)?
+    // TODO: Require all fields to also impl Metricable
+    let ast: syn::ItemStruct = syn::parse(input).unwrap();
+    let fields = ast.fields;
+    let name = &ast.ident;
+    let fields = fields.iter().fold(String::new(), |acc, f| acc + &quote!([#f.ident, #f.ty]).to_string() + ",");
+    // TODO: move the static into some linker section so it does not occupy flash space
+    // TODO: handle module paths and name spaces
+    let sym_name = format!(r#"{{"type":"Type",""ty":"{name}", fields: [{fields}]}}"#);
+    quote! {
+        unsafe impl ::probe_plotter::metric::Metricable for #name {}
+
+        #[allow(non_upper_case_globals)]
+        #[unsafe(export_name = #sym_name)]
+        static #name: u8 = 0;
+
+    }.into()
+}

@@ -7,6 +7,11 @@ use defmt_rtt as _;
 use panic_halt as _;
 use probe_plotter::{make_metric, make_setting};
 
+#[derive(probe_plotter::metric::Metricable)]
+struct Foo {
+    x: u8,
+}
+
 #[entry]
 fn main() -> ! {
     defmt::println!("Running...");
