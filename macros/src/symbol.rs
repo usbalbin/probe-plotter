@@ -104,6 +104,39 @@ impl SettingSymbol {
     }
 }
 
+pub struct FooSymbol {
+    /// Underlaying data type
+    ty: String,
+
+    /// Variable name
+    name: String,
+
+    address: String,
+    expression_string: String,
+}
+
+impl FooSymbol {
+    pub fn new(ty: String, name: String, address: String, expression_string: String) -> Self {
+        Self {
+            // `CARGO_PKG_NAME` is set to the invoking package's name.
+            ty,
+            name,
+            address,
+            expression_string,
+        }
+    }
+
+    pub fn mangle(&self) -> String {
+        format!(
+            r#"{{"type":"Foo","ty":"{}","name":"{}","address":{},"address":{}}}"#,
+            json_escape(&self.ty),
+            json_escape(&self.name),
+            json_escape(&self.address),
+            json_escape(&self.expression_string),
+        )
+    }
+}
+
 fn json_escape(string: &str) -> String {
     use std::fmt::Write;
 

@@ -27,6 +27,18 @@ pub enum Symbol {
         /// Step size
         step_size: f64,
     },
+    Foo {
+        name: String,
+
+        /// Exproession to apply before plotting
+        expr: String,
+
+        /// Type of value, i32, u8 etc.
+        ty: Type,
+
+        /// Explicit address of value
+        address: u64,
+    },
 }
 
 impl Symbol {
@@ -34,12 +46,14 @@ impl Symbol {
         match self {
             Symbol::Metric { name, .. } => name,
             Symbol::Setting { name, .. } => name,
+            Symbol::Foo { name, .. } => name,
         }
     }
     pub fn ty(&self) -> Type {
         match self {
             Symbol::Metric { ty, .. } => *ty,
             Symbol::Setting { ty, .. } => *ty,
+            Symbol::Foo { ty, .. } => *ty,
         }
     }
 }

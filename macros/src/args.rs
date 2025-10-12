@@ -41,6 +41,49 @@ impl Parse for MetricArgs {
     }
 }
 
+// root.child.leaf: i8 @ 0x1234, "root.child.leaf"
+pub(crate) struct FooArgs {
+    pub(crate) name: String,
+    pub(crate) ty: syn::Ident,
+    pub(crate) address: syn::LitInt,
+    pub(crate) expression_string: syn::LitStr,
+}
+
+impl Parse for FooArgs {
+    fn parse(input: ParseStream) -> parse::Result<Self> {
+        let name = syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_terminated(input)?;
+        let name_span = name.span();
+        let name = name
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+
+        let _colon: Token![:] = input.parse()?;
+        let ty = input.parse()?;
+        let _at: Token![@] = input.parse()?;
+        let address = input.parse()?;
+
+        let comma: parse::Result<Token![,]> = input.parse();
+        let expression_string = input.parse();
+
+        let expression_string = match (comma, expression_string) {
+            (Ok(_), Ok(expr)) => expr,
+            (Ok(_), Err(e)) => return Err(e),
+            (Err(_), _) => LitStr::new(&name, name_span),
+        };
+
+        Ok(FooArgs {
+            name,
+            ty,
+            address,
+            expression_string,
+        })
+    }
+}
+
+// root.child.leaf: i8 @ 0x1234, setting
+
 // FOO: i32 = 0, 0..=10, 2
 // FOO: i32 = 0, 0..=10, // Step size defaults to 1
 // FOO: i32 = 0 // range defaults to the types full range

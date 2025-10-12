@@ -69,16 +69,21 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             continue;
         };
 
+        let do_math = |expr| {
+            let expr = ShuntingParser::parse_str(expr).unwrap();
+            let math_ctx = MathContext::new();
+            math_ctx.setvar(&name, shunting::MathOp::Number(0.0));
+            math_ctx
+                .eval(&expr)
+                .expect("Use the metrics name as name for the value in the expression");
+            expr
+        };
+
         // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
         match sym {
             Symbol::Metric { name, expr, ty } => {
-                let expr = ShuntingParser::parse_str(&expr).unwrap();
-                let math_ctx = MathContext::new();
-                math_ctx.setvar(&name, shunting::MathOp::Number(0.0));
-                math_ctx
-                    .eval(&expr)
-                    .expect("Use the metrics name as name for the value in the expression");
+                let expr = do_math(&expr);
                 metrics.push(Metric {
                     name,
                     expr,
@@ -100,6 +105,21 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                     value: f64::NAN,
                     range,
                     step_size,
+                });
+            }
+            Symbol::Foo {
+                name,
+                expr,
+                ty,
+                address,
+            } => {
+                let expr = do_math(&expr);
+                metrics.push(Metric {
+                    name,
+                    expr,
+                    ty,
+                    address: address,
+                    last_value: f64::NAN,
                 });
             }
         }
