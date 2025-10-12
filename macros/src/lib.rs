@@ -64,6 +64,10 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
     .into()
 }
 
+pub fn make_inplace_thing(args: TokenStream) -> TokenStream {
+
+}
+
 /// Create a Setting instance that will be shown as a slider in the probe-plotter utility
 ///
 /// ```
@@ -129,7 +133,26 @@ fn hash(string: &str) -> u64 {
     hasher.finish()
 }
 
-#[proc_macro_derive(Metricable)]
+///
+/// ```
+/// #[derive(Plottable)]
+/// struct Foo {
+///     #[metric("bar / 33.1")]
+///     bar: u8,
+/// 
+///     baz: Baz,
+/// 
+///     #[setting(0..=3, 1)]
+///     quix: f32
+/// }
+/// 
+/// #[derive(Plottable)]
+/// struct Baz {
+///     #[metric("a * 3.0")]
+///     a: i16
+/// }
+/// ```
+#[proc_macro_derive(Plottable)]
 pub fn impl_metricable(input: TokenStream) -> TokenStream {
     // TODO: Probably require repr(C)?
     // TODO: Require all fields to also impl Metricable
