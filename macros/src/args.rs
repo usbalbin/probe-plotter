@@ -45,24 +45,28 @@ impl Parse for MetricArgs {
 pub(crate) struct FooArgs {
     pub(crate) name: String,
     pub(crate) ty: syn::Ident,
-    pub(crate) address: syn::LitInt,
+    pub(crate) address: u64,
     pub(crate) expression_string: syn::LitStr,
+    pub(crate) static_name: syn::Ident,
 }
 
 impl Parse for FooArgs {
     fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name = syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_terminated(input)?;
+        let name =
+            syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
         let name_span = name.span();
         let name = name
             .iter()
             .map(|s| s.to_string())
             .collect::<Vec<_>>()
             .join(".");
+        let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
 
         let _colon: Token![:] = input.parse()?;
         let ty = input.parse()?;
         let _at: Token![@] = input.parse()?;
-        let address = input.parse()?;
+        let address: syn::LitInt = input.parse()?;
+        let address = address.base10_parse()?;
 
         let comma: parse::Result<Token![,]> = input.parse();
         let expression_string = input.parse();
@@ -78,6 +82,7 @@ impl Parse for FooArgs {
             ty,
             address,
             expression_string,
+            static_name,
         })
     }
 }
@@ -89,17 +94,20 @@ pub(crate) struct BarArgs {
     pub(crate) base_symbol: syn::Ident,
     pub(crate) offset: u64,
     pub(crate) expression_string: syn::LitStr,
+    pub(crate) static_name: syn::Ident,
 }
 
 impl Parse for BarArgs {
     fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name = syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_terminated(input)?;
+        let name =
+            syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
         let name_span = name.span();
         let name = name
             .iter()
             .map(|s| s.to_string())
             .collect::<Vec<_>>()
             .join(".");
+        let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
 
         let _colon: Token![:] = input.parse()?;
         let ty = input.parse()?;
@@ -124,6 +132,7 @@ impl Parse for BarArgs {
             base_symbol,
             offset,
             expression_string,
+            static_name,
         })
     }
 }

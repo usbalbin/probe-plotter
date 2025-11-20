@@ -111,12 +111,12 @@ pub struct FooSymbol {
     /// Variable name
     name: String,
 
-    address: String,
+    address: u64,
     expression_string: String,
 }
 
 impl FooSymbol {
-    pub fn new(ty: String, name: String, address: String, expression_string: String) -> Self {
+    pub fn new(ty: String, name: String, address: u64, expression_string: String) -> Self {
         Self {
             // `CARGO_PKG_NAME` is set to the invoking package's name.
             ty,
@@ -128,10 +128,10 @@ impl FooSymbol {
 
     pub fn mangle(&self) -> String {
         format!(
-            r#"{{"type":"Foo","ty":"{}","name":"{}","address":{},"address":{}}}"#,
+            r#"{{"type":"Foo","ty":"{}","name":"{}","address":{},"expr":"{}"}}"#,
             json_escape(&self.ty),
             json_escape(&self.name),
-            json_escape(&self.address),
+            self.address,
             json_escape(&self.expression_string),
         )
     }
@@ -169,7 +169,7 @@ impl BarSymbol {
 
     pub fn mangle(&self) -> String {
         format!(
-            r#"{{"type":"Foo","ty":"{}","name":"{}","base_symbol":{},"offset":{},"address":{}}}"#,
+            r#"{{"type":"Bar","ty":"{}","name":"{}","base_symbol":"{}","offset":{},"expr":"{}"}}"#,
             json_escape(&self.ty),
             json_escape(&self.name),
             json_escape(&self.base_symbol),

@@ -76,10 +76,10 @@ impl Symbol {
 }
 
 #[derive(Debug)]
-pub struct InvalidSymbolError;
+pub struct InvalidSymbolError(pub serde_json::Error);
 
 impl Symbol {
     pub fn demangle(raw: &str) -> Result<Self, InvalidSymbolError> {
-        serde_json::from_str(raw).map_err(|_| InvalidSymbolError)
+        serde_json::from_str(raw).map_err(InvalidSymbolError)
     }
 }

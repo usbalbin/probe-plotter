@@ -65,17 +65,23 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             continue;
         }
 
-        let Ok(sym) = Symbol::demangle(name) else {
-            continue;
+        let sym = match Symbol::demangle(name) {
+            Ok(sym) => sym,
+            Err(e) => {
+                if name.contains(r#""name":"#) {
+                    println!("Failed to parse: {name}, with {e:?}");
+                }
+                continue;
+            }
         };
 
-        let do_math = |expr| {
-            let expr = ShuntingParser::parse_str(expr).unwrap();
+        let do_math = |name, expr_str| {
+            let expr = ShuntingParser::parse_str(expr_str).unwrap();
             let math_ctx = MathContext::new();
-            math_ctx.setvar(&name, shunting::MathOp::Number(0.0));
+            math_ctx.setvar(name, shunting::MathOp::Number(0.0));
             math_ctx
                 .eval(&expr)
-                .expect("Use the metrics name as name for the value in the expression");
+                .expect(&format!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
             expr
         };
 
@@ -83,7 +89,7 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
         //assert_eq!(entry.size(), 4);
         match sym {
             Symbol::Metric { name, expr, ty } => {
-                let expr = do_math(&expr);
+                let expr = do_math(&name, &expr);
                 metrics.push(Metric {
                     name,
                     expr,
@@ -113,7 +119,7 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 ty,
                 address,
             } => {
-                let expr = do_math(&expr);
+                let expr = do_math(&name, &expr);
                 metrics.push(Metric {
                     name,
                     expr,
@@ -132,7 +138,7 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 // This will be O(n^2), should probably use a hashmap or something to bring it down
                 if let Some(base) = elf.symbols().find(|entry| entry.name() == Ok(&base_symbol)) {
                     let base_address = base.address();
-                    let expr = do_math(&expr);
+                    let expr = do_math(&name, &expr);
                     metrics.push(Metric {
                         name,
                         expr,
@@ -142,12 +148,17 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                     });
                 } else {
                     eprintln!(
-                        "Could not base symbol {base_symbol:?} when parsing 'bar' metric {name:?}"
+                        "Could not find base symbol {base_symbol:?} when parsing 'bar' metric {name:?}"
                     );
                 }
             }
         }
     }
+
+    for m in &metrics {
+        dbg!(&m.name);
+    }
+    println!("{metrics:?}");
 
     (metrics, settings, scan_region)
 }

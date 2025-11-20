@@ -43,6 +43,7 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
 
     quote!(
         cortex_m::interrupt::free(|_| {
+            #[used]
             #[unsafe(export_name = #sym_name)]
             static mut #name: (#ty, bool) =
                 (0, false);
@@ -95,6 +96,7 @@ pub fn make_setting(args: TokenStream) -> TokenStream {
 
     quote!(
         cortex_m::interrupt::free(|_| {
+            #[used]
             #[unsafe(export_name = #sym_name)]
             static mut #name: (#ty, bool) =
                 (0, false);
@@ -131,12 +133,13 @@ pub fn make_foo(args: TokenStream) -> TokenStream {
     let sym_name = FooSymbol::new(
         args.ty.to_string(),
         args.name.clone(),
-        args.address.to_string(),
+        args.address,
         args.expression_string.value(),
     )
     .mangle();
-    let static_name = args.name.replace(".", "__");
+    let static_name = args.static_name;
     quote! {
+        #[used]
         #[unsafe(export_name = #sym_name)]
         static #static_name: u8 = 0;
     }
@@ -163,8 +166,9 @@ pub fn make_bar(args: TokenStream) -> TokenStream {
         args.expression_string.value(),
     )
     .mangle();
-    let static_name = args.name.replace(".", "__");
+    let static_name = args.static_name;
     quote! {
+        #[used]
         #[unsafe(export_name = #sym_name)]
         static #static_name: u8 = 0;
     }
