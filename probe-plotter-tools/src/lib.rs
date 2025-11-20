@@ -1,9 +1,9 @@
 pub mod gui;
 pub mod metric;
 pub mod setting;
-pub mod symbol;
 
-use std::{io::Read, sync::mpsc, time::Duration};
+use probe_plotter_common::{symbol::{self, Member}, Atype, PrimitiveType, TypeDef};
+use std::{collections::HashMap, io::Read, sync::mpsc, time::Duration};
 
 use defmt_decoder::DecodeError;
 use defmt_parser::Level;
@@ -13,37 +13,46 @@ use probe_rs::{
     rtt::{self, ChannelMode, Rtt},
 };
 use rerun::TextLogLevel;
-use serde::Deserialize;
 use shunting::{MathContext, ShuntingParser};
 
 use crate::{metric::Metric, setting::Setting, symbol::Symbol};
 
-pub fn read_value(core: &mut Core, address: u64, ty: Type) -> Result<f64, probe_rs::Error> {
+
+pub fn read_value(core: &mut Core, address: u64, ty: PrimitiveType) -> Result<f64, probe_rs::Error> {
     let x = match ty {
-        Type::u8 => core.read_word_8(address)? as f64,
-        Type::u16 => core.read_word_16(address)? as f64,
-        Type::u32 => core.read_word_32(address)? as f64,
+        PrimitiveType::u8 => core.read_word_8(address)? as f64,
+        PrimitiveType::u16 => core.read_word_16(address)? as f64,
+        PrimitiveType::u32 => core.read_word_32(address)? as f64,
 
-        Type::i8 => core.read_word_8(address)? as i8 as f64,
-        Type::i16 => core.read_word_16(address)? as i16 as f64,
-        Type::i32 => core.read_word_32(address)? as i32 as f64,
+        PrimitiveType::i8 => core.read_word_8(address)? as i8 as f64,
+        PrimitiveType::i16 => core.read_word_16(address)? as i16 as f64,
+        PrimitiveType::i32 => core.read_word_32(address)? as i32 as f64,
 
-        Type::f32 => f32::from_bits(core.read_word_32(address)?) as f64,
+        PrimitiveType::f32 => f32::from_bits(core.read_word_32(address)?) as f64,
     };
 
     Ok(x)
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
-pub enum Type {
-    u8,
-    u16,
-    u32,
-    i8,
-    i16,
-    i32,
-    f32,
+pub fn read_from_slice(slice: &[u8], offset: u64, ty: PrimitiveType) -> f64 {
+    let offset = offset as usize;
+    match ty {
+        PrimitiveType::u8 => slice[offset] as f64,
+        PrimitiveType::u16 => u16::from_le_bytes(slice[offset..(offset + 2)].try_into().unwrap()) as f64,
+        PrimitiveType::u32 => u32::from_le_bytes(slice[offset..(offset + 4)].try_into().unwrap()) as f64,
+
+        PrimitiveType::i8 => slice[offset] as i8 as f64,
+        PrimitiveType::i16 => {
+            u16::from_le_bytes(slice[offset..(offset + 2)].try_into().unwrap()) as i16 as f64
+        }
+        PrimitiveType::i32 => {
+            u32::from_le_bytes(slice[offset..(offset + 4)].try_into().unwrap()) as i32 as f64
+        }
+
+        PrimitiveType::f32 => f32::from_bits(u32::from_le_bytes(
+            slice[offset..(offset + 4)].try_into().unwrap(),
+        )) as f64,
+    }
 }
 
 // Most of this is taken from https://github.com/knurling-rs/defmt/blob/8e517f8d7224237893e39337a61de8ef98b341f2/decoder/src/elf2table/mod.rs and modified
@@ -69,6 +78,8 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             continue;
         };
 
+        let mut types = HashMap::new();
+
         // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
         match sym {
@@ -79,13 +90,38 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 math_ctx
                     .eval(&expr)
                     .expect("Use the metrics name as name for the value in the expression");
-                metrics.push(Metric {
-                    name,
-                    expr,
-                    ty,
-                    address: entry.address(),
-                    last_value: f64::NAN,
-                });
+                let address = entry.address();
+
+                if let Ok(ty) = (&ty).try_into() {
+                    metrics.push(Metric::Primitive {
+                        name,
+                        expr,
+                        ty,
+                        address,
+                        last_value: f64::NAN,
+                    });
+                } else {
+                    let x = types
+                        .get(&ty)
+                        .expect(&format!("Undefined type: '{name}'"));
+
+                    match x {
+                        TypeDef::Struct { name, fields } => todo!(),
+                        TypeDef::Enum {
+                            name: ty,
+                            discriminator_type,
+                            variants,
+                        } => metrics.push(Metric::Enum {
+                            name,
+                            ty: ty.clone(),
+                            address,
+                            discriminator_type: (),
+                            last_discriminator_value: (),
+                            data_variants: (),
+                            max_size: (),
+                        }),
+                    }
+                }
             }
             Symbol::Setting {
                 name,
@@ -102,6 +138,76 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                     step_size,
                 });
             }
+            Symbol::Type { name, fields } => {
+                assert!(
+                    types
+                        .insert(name.clone(), TypeDef::Struct { name, fields })
+                        .is_none(),
+                    "Type '{name}' already defined"
+                );
+            }
+        }
+
+        enum MetricIn {
+            Primitive {
+                name: String,
+                ty: Type,
+                address: u32,
+
+                expr: shunting::RPNExpr,
+            },
+            Struct {
+                name: String,
+                ty: Type,
+                address: u32,
+
+                fields: Vec<Member>,
+            },
+            Enum {
+                name: String,
+                ty: Type,
+                address: u32,
+
+                discriminator_type: Type,
+                data_variants: Vec<Type>,
+            },
+        }
+
+        fn check_type(
+            name: String,
+            ty: Type,
+            base_address: u32,
+            metrics: &mut Vec<Metric>,
+            types: &HashMap<String, TypeDef>,
+        ) {
+            if ty.is_primitive() {
+                metrics.push(Metric::Primitive {
+                    name,
+                    expr: todo!(),
+                    ty,
+                    address: todo!(),
+                    last_value: todo!(),
+                });
+                return;
+            }
+
+            let t = types.get(&m.ty).expect("Undefined type");
+
+            match t {
+                TypeDef::Struct { name, fields } => {
+                    for f in fields {
+                        let base_address = base_address + f.offset.unwrap();
+                        check_type(f.name, f.ty, base_address, metrics, types);
+                    }
+                }
+            }
+        }
+
+        for m in &metrics {
+            //custom {
+            check_type(m);
+
+            metrics.push(m.ty.clone());
         }
     }
 
