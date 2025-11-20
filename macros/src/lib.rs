@@ -64,6 +64,10 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
     .into()
 }
 
+/*pub fn make_inplace_thing(args: TokenStream) -> TokenStream {
+
+}*/
+
 /// Create a Setting instance that will be shown as a slider in the probe-plotter utility
 ///
 /// ```
@@ -127,4 +131,60 @@ fn hash(string: &str) -> u64 {
     let mut hasher = DefaultHasher::new();
     string.hash(&mut hasher);
     hasher.finish()
+}
+
+///
+/// ```
+/// #[derive(Plottable)]
+/// struct Foo {
+///     #[metric("bar / 33.1")]
+///     bar: u8,
+///
+///     baz: Baz,
+///
+///     #[setting(0..=3, 1)]
+///     quix: f32
+/// }
+///
+/// #[derive(Plottable)]
+/// struct Baz {
+///     #[metric("a * 3.0")]
+///     a: i16
+/// }
+/// ```
+#[proc_macro_derive(Plottable)]
+pub fn impl_metricable(input: TokenStream) -> TokenStream {
+    // TODO: Probably require repr(C)?
+    // TODO: Require all fields to also impl Metricable
+    let ast: syn::ItemStruct = syn::parse(input).unwrap();
+    let fields = ast.fields;
+    let name = &ast.ident;
+
+    let fields: Vec<_> = fields
+        .iter()
+        .map(|f| {
+            let ty = &f.ty;
+            probe_plotter_common::symbol::Member {
+            name: f.ident.as_ref().unwrap().to_string(),
+            ty: quote!(#ty).to_string(),
+            offset: None,
+        }})
+        .collect();
+
+    // TODO: move the static into some linker section so it does not occupy flash space
+    // TODO: handle module paths and name spaces
+    let sym_name = serde_json::to_string(&probe_plotter_common::symbol::Symbol::Type {
+        name: name.to_string(),
+        fields,
+    })
+    .unwrap();
+
+    quote! {
+        unsafe impl ::probe_plotter::metric::Metricable for #name {}
+
+        #[allow(non_upper_case_globals)]
+        #[unsafe(export_name = #sym_name)]
+        static #name: u8 = 0;
+    }
+    .into()
 }

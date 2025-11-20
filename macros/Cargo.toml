@@ -7,6 +7,9 @@ edition = "2024"
 proc-macro2 = "1.0.95"
 quote = "1.0.40"
 syn = { version = "2", features = ["full"] }
+probe-plotter-common = { path = "../probe-plotter-common" }
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.141"
 
 [lib]
 proc-macro = true
