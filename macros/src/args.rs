@@ -1,7 +1,7 @@
 // Based on defmt
 
 use syn::{
-    LitStr, RangeLimits, Token,
+    LitInt, LitStr, RangeLimits, Token,
     parse::{self, Parse, ParseStream},
     spanned::Spanned,
 };
@@ -77,6 +77,52 @@ impl Parse for FooArgs {
             name,
             ty,
             address,
+            expression_string,
+        })
+    }
+}
+
+// root.child.leaf: i8 @ BASE_SYMBOL + 3, "root.child.leaf"
+pub(crate) struct BarArgs {
+    pub(crate) name: String,
+    pub(crate) ty: syn::Ident,
+    pub(crate) base_symbol: syn::Ident,
+    pub(crate) offset: u64,
+    pub(crate) expression_string: syn::LitStr,
+}
+
+impl Parse for BarArgs {
+    fn parse(input: ParseStream) -> parse::Result<Self> {
+        let name = syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_terminated(input)?;
+        let name_span = name.span();
+        let name = name
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>()
+            .join(".");
+
+        let _colon: Token![:] = input.parse()?;
+        let ty = input.parse()?;
+        let _at: Token![@] = input.parse()?;
+        let base_symbol = input.parse()?;
+        let _plus: Token![+] = input.parse()?;
+        let offset: LitInt = input.parse()?;
+        let offset = offset.base10_parse()?;
+
+        let comma: parse::Result<Token![,]> = input.parse();
+        let expression_string = input.parse();
+
+        let expression_string = match (comma, expression_string) {
+            (Ok(_), Ok(expr)) => expr,
+            (Ok(_), Err(e)) => return Err(e),
+            (Err(_), _) => LitStr::new(&name, name_span),
+        };
+
+        Ok(BarArgs {
+            name,
+            ty,
+            base_symbol,
+            offset,
             expression_string,
         })
     }

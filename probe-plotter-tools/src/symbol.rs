@@ -39,6 +39,21 @@ pub enum Symbol {
         /// Explicit address of value
         address: u64,
     },
+    Bar {
+        name: String,
+
+        /// Exproession to apply before plotting
+        expr: String,
+
+        /// Type of value, i32, u8 etc.
+        ty: Type,
+
+        /// Symbol name of symbol where the address offset is relative to
+        base_symbol: String,
+
+        /// Address offset
+        offset: u64,
+    },
 }
 
 impl Symbol {
@@ -47,6 +62,7 @@ impl Symbol {
             Symbol::Metric { name, .. } => name,
             Symbol::Setting { name, .. } => name,
             Symbol::Foo { name, .. } => name,
+            Symbol::Bar { name, .. } => name,
         }
     }
     pub fn ty(&self) -> Type {
@@ -54,6 +70,7 @@ impl Symbol {
             Symbol::Metric { ty, .. } => *ty,
             Symbol::Setting { ty, .. } => *ty,
             Symbol::Foo { ty, .. } => *ty,
+            Symbol::Bar { ty, .. } => *ty,
         }
     }
 }

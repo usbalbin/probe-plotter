@@ -7,7 +7,7 @@ use proc_macro::{Span, TokenStream};
 use quote::quote;
 use syn::parse_macro_input;
 
-use crate::symbol::{FooSymbol, MetricsSymbol, SettingSymbol};
+use crate::symbol::{BarSymbol, FooSymbol, MetricsSymbol, SettingSymbol};
 
 mod args;
 mod cargo;
@@ -117,10 +117,10 @@ pub fn make_setting(args: TokenStream) -> TokenStream {
 }
 
 /// TODO: Figure out a better name
-/// 
+///
 /// Tell probe-plotter-tools about an existing value at the provided address
 /// which should be shown as a metric
-/// 
+///
 /// ```rust
 /// probe_plotter::make_foo(root.path.child: u8 @ 0x1234, "3 * root.path.child");
 /// ```
@@ -132,6 +132,34 @@ pub fn make_foo(args: TokenStream) -> TokenStream {
         args.ty.to_string(),
         args.name.clone(),
         args.address.to_string(),
+        args.expression_string.value(),
+    )
+    .mangle();
+    let static_name = args.name.replace(".", "__");
+    quote! {
+        #[unsafe(export_name = #sym_name)]
+        static #static_name: u8 = 0;
+    }
+    .into()
+}
+
+/// TODO: Figure out a better name
+///
+/// Tell probe-plotter-tools about an existing value at a relative offset to a symbol
+/// which should be shown as a metric
+///
+/// ```rust
+/// probe_plotter::make_bar(root.path.child: u8 @ MY_SYMBOL + 0x1234, "3 * root.path.child");
+/// ```
+#[proc_macro]
+pub fn make_bar(args: TokenStream) -> TokenStream {
+    let args = parse_macro_input!(args as args::BarArgs);
+
+    let sym_name = BarSymbol::new(
+        args.ty.to_string(),
+        args.name.clone(),
+        args.base_symbol.to_string(),
+        args.offset,
         args.expression_string.value(),
     )
     .mangle();

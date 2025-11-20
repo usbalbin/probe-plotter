@@ -137,6 +137,48 @@ impl FooSymbol {
     }
 }
 
+pub struct BarSymbol {
+    /// Underlaying data type
+    ty: String,
+
+    /// Variable name
+    name: String,
+
+    base_symbol: String,
+    offset: u64,
+    expression_string: String,
+}
+
+impl BarSymbol {
+    pub fn new(
+        ty: String,
+        name: String,
+        base_symbol: String,
+        offset: u64,
+        expression_string: String,
+    ) -> Self {
+        Self {
+            // `CARGO_PKG_NAME` is set to the invoking package's name.
+            ty,
+            name,
+            base_symbol,
+            offset,
+            expression_string,
+        }
+    }
+
+    pub fn mangle(&self) -> String {
+        format!(
+            r#"{{"type":"Foo","ty":"{}","name":"{}","base_symbol":{},"offset":{},"address":{}}}"#,
+            json_escape(&self.ty),
+            json_escape(&self.name),
+            json_escape(&self.base_symbol),
+            self.offset,
+            json_escape(&self.expression_string),
+        )
+    }
+}
+
 fn json_escape(string: &str) -> String {
     use std::fmt::Write;
 

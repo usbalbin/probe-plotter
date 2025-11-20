@@ -122,6 +122,30 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                     last_value: f64::NAN,
                 });
             }
+            Symbol::Bar {
+                name,
+                expr,
+                ty,
+                base_symbol,
+                offset,
+            } => {
+                // This will be O(n^2), should probably use a hashmap or something to bring it down
+                if let Some(base) = elf.symbols().find(|entry| entry.name() == Ok(&base_symbol)) {
+                    let base_address = base.address();
+                    let expr = do_math(&expr);
+                    metrics.push(Metric {
+                        name,
+                        expr,
+                        ty,
+                        address: base_address + offset,
+                        last_value: f64::NAN,
+                    });
+                } else {
+                    eprintln!(
+                        "Could not base symbol {base_symbol:?} when parsing 'bar' metric {name:?}"
+                    );
+                }
+            }
         }
     }
 
