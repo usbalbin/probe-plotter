@@ -7,7 +7,7 @@ use syn::{
     parse_macro_input,
 };
 
-use crate::expr_to_float_lit;
+use crate::{expr_to_float_lit, parse_name};
 
 pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as SettingArgs);
@@ -20,27 +20,27 @@ pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
     })
     .unwrap();
 
-    let name = args.name;
     let ty = args.ty;
     let initial_value = args.initial_val;
+    let static_name = args.static_name;
 
     quote!(
         cortex_m::interrupt::free(|_| {
             #[used]
             #[unsafe(export_name = #sym_name)]
-            static mut #name: (#ty, bool) =
+            static mut #static_name: (#ty, bool) =
                 (0, false);
 
             #[allow(unsafe_code)]
-            let used = unsafe { #name.1 };
+            let used = unsafe { #static_name.1 };
             if used {
                 None
             } else {
                 #[allow(unsafe_code)]
                 unsafe {
-                    #name.1 = true;
-                    #name.0 = #initial_value;
-                    Some(::probe_plotter::Setting::new(&mut #name.0))
+                    #static_name.1 = true;
+                    #static_name.0 = #initial_value;
+                    Some(::probe_plotter::Setting::new(&mut #static_name.0))
                 }
             }
         })
@@ -55,17 +55,19 @@ pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
 // FOO: i32 = 0 // range defaults to the types full range
 // TODO Implement the defaults
 pub(crate) struct SettingArgs {
-    pub(crate) name: syn::Ident,
+    pub(crate) name: String,
     pub(crate) ty: syn::Ident,
     pub(crate) initial_val: syn::Expr,
     pub(crate) range_start: syn::LitFloat,
     pub(crate) range_end: syn::LitFloat,
     pub(crate) step_size: syn::LitFloat,
+    pub(crate) static_name: syn::Ident,
 }
 
 impl Parse for SettingArgs {
     fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name = input.parse()?;
+        let (static_name, name, _name_span) = parse_name(&input)?;
+
         let _colon: Token![:] = input.parse()?;
         let ty = input.parse()?;
         let _eq: Token![=] = input.parse()?;
@@ -105,6 +107,7 @@ impl Parse for SettingArgs {
             range_start: expr_to_float_lit(*range_start)?,
             range_end: expr_to_float_lit(*range_end)?,
             step_size,
+            static_name,
         })
     }
 }

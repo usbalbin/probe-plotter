@@ -2,10 +2,12 @@ use probe_plotter_common::symbol::Symbol;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    LitStr, Token,
+    Token,
     parse::{self, Parse, ParseStream},
     parse_macro_input,
 };
+
+use crate::{parse_expr_str, parse_name};
 
 pub fn make_metric(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as Args);
@@ -21,27 +23,27 @@ pub(crate) fn metric_helper(args: Args) -> TokenStream {
     })
     .unwrap();
 
-    let name = args.name;
     let ty = args.ty;
     let initial_value = args.initial_val;
+    let static_name = args.static_name;
 
     quote!(
         cortex_m::interrupt::free(|_| {
             #[used]
             #[unsafe(export_name = #sym_name)]
-            static mut #name: (#ty, bool) =
+            static mut #static_name: (#ty, bool) =
                 (0, false);
 
             #[allow(unsafe_code)]
-            let used = unsafe { #name.1 };
+            let used = unsafe { #static_name.1 };
             if used {
                 None
             } else {
                 #[allow(unsafe_code)]
                 unsafe {
-                    #name.1 = true;
-                    #name.0 = #initial_value;
-                    Some(::probe_plotter::Metric::new(&mut #name.0))
+                    #static_name.1 = true;
+                    #static_name.0 = #initial_value;
+                    Some(::probe_plotter::Metric::new(&mut #static_name.0))
                 }
             }
         })
@@ -49,37 +51,32 @@ pub(crate) fn metric_helper(args: Args) -> TokenStream {
     .into()
 }
 
-//FOO: i32 = 0, "x * 3.0"
-//FOO: i32 = 0 // defaults to "x"
+//FOO: i32 = 0, "FOO * 3.0"
+//FOO: i32 = 0 // defaults to "FOO"
 pub(crate) struct Args {
-    pub(crate) name: syn::Ident,
+    pub(crate) name: String,
     pub(crate) ty: syn::Ident,
     pub(crate) initial_val: syn::Expr,
     pub(crate) expression_string: Option<syn::LitStr>,
+    pub(crate) static_name: syn::Ident,
 }
 
 impl Parse for Args {
     fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name: syn::Ident = input.parse()?;
+        let (static_name, name, name_span) = parse_name(&input)?;
         let _comma: Token![:] = input.parse()?;
         let ty = input.parse()?;
         let _comma: Token![=] = input.parse()?;
         let initial_val = input.parse()?;
 
-        let comma: parse::Result<Token![,]> = input.parse();
-        let expression_string = input.parse();
-
-        let expression_string = match (comma, expression_string) {
-            (Ok(_), Ok(expr)) => expr,
-            (Ok(_), Err(e)) => return Err(e),
-            (Err(_), _) => LitStr::new(&name.to_string(), name.span()),
-        };
+        let expression_string = parse_expr_str(&input, &name, name_span)?;
 
         Ok(Self {
             name,
             ty,
             initial_val,
             expression_string: Some(expression_string),
+            static_name,
         })
     }
 }

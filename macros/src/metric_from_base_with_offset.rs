@@ -5,12 +5,12 @@ use probe_plotter_common::{
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    LitInt, LitStr, Token,
+    LitInt, Token,
     parse::{self, Parse, ParseStream},
     parse_macro_input,
 };
 
-use crate::parse_name;
+use crate::{parse_expr_str, parse_name};
 
 pub fn make_metric_from_base_with_offset(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as Args);
@@ -27,7 +27,6 @@ pub fn make_metric_from_base_with_offset(args: TokenStream) -> TokenStream {
     .unwrap();
     let static_name = args.static_name;
     quote! {
-
         #[used]
         #[unsafe(export_name = #sym_name)]
         #[allow(non_upper_case_globals)]
@@ -58,14 +57,7 @@ impl Parse for Args {
         let offset: LitInt = input.parse()?;
         let offset = offset.base10_parse()?;
 
-        let comma: parse::Result<Token![,]> = input.parse();
-        let expression_string = input.parse();
-
-        let expression_string = match (comma, expression_string) {
-            (Ok(_), Ok(expr)) => expr,
-            (Ok(_), Err(e)) => return Err(e),
-            (Err(_), _) => LitStr::new(&name, name_span),
-        };
+        let expression_string = parse_expr_str(&input, &name, name_span)?;
 
         Ok(Args {
             name,

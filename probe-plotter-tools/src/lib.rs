@@ -138,7 +138,9 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
 
         let name = rustc_demangle::demangle(name).to_string();
 
-        eprintln!("symbol: {name:?}: {entry:?}");
+        eprintln!("  {name}");
+
+        //eprintln!("symbol: {name:?}: {entry:?}");
 
         if name == "_SEGGER_RTT" {
             scan_region = rtt::ScanRegion::Exact(entry.address());
@@ -155,11 +157,11 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             }
         };
 
-        let do_math = |name, expr_str| match expr_str {
+        let do_math = |name: &str, math_ctx_variable_name: &str, expr_str| match expr_str {
             Some(expr_str) => {
                 let expr = ShuntingParser::parse_str(expr_str).unwrap();
                 let math_ctx = MathContext::new();
-                math_ctx.setvar(name, shunting::MathOp::Number(0.0));
+                math_ctx.setvar(&math_ctx_variable_name, shunting::MathOp::Number(0.0));
                 math_ctx
                     .eval(&expr)
                     .expect(&format!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
@@ -177,7 +179,8 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 ty,
                 address,
             } => {
-                let expr = do_math(&name, expr.as_deref());
+                let math_ctx_variable_name = name.replace('.', "__");
+                let expr = do_math(&name, &math_ctx_variable_name, expr.as_deref());
                 let address = match address {
                     symbol::Address::Symbols => Address::Fixed(entry.address()),
                     symbol::Address::Hardcoded { address } => Address::Fixed(address),
@@ -191,10 +194,12 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 };
                 metrics.push(Metric {
                     name,
+                    math_ctx_variable_name,
                     expr,
                     ty,
                     address,
                     last_value: f64::NAN,
+                    is_set: false,
                 });
             }
             Symbol::Setting {
@@ -213,6 +218,10 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                 });
             }
         }
+    }
+
+    for s in &settings {
+        dbg!(&s.name);
     }
 
     for m in &metrics {

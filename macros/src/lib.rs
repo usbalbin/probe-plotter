@@ -2,6 +2,7 @@
 
 extern crate proc_macro;
 
+use probe_plotter_common::strip_dots;
 use proc_macro::TokenStream;
 use proc_macro2::Span;
 use syn::{
@@ -137,4 +138,19 @@ pub(crate) fn parse_name(input: &ParseStream) -> parse::Result<(syn::Ident, Stri
     let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
 
     Ok((static_name, name, name_span))
+}
+
+pub(crate) fn parse_expr_str(
+    input: &ParseStream,
+    name: &str,
+    name_span: Span,
+) -> parse::Result<syn::LitStr> {
+    let comma: parse::Result<Token![,]> = input.parse();
+    let expression_string: parse::Result<syn::LitStr> = input.parse();
+
+    match (comma, expression_string) {
+        (Ok(_), Ok(expr)) => Ok(syn::LitStr::new(&strip_dots(&expr.value()), name_span)),
+        (Ok(_), Err(e)) => Err(e),
+        (Err(_), _) => Ok(syn::LitStr::new(name, name_span)),
+    }
 }

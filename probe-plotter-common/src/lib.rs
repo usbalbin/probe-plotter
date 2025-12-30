@@ -58,3 +58,7 @@ impl Parse for PrimitiveType {
         })
     }
 }
+
+pub fn strip_dots(s: &str) -> String {
+    s.replace('.', "__")
+}

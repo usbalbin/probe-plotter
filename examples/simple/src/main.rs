@@ -21,11 +21,11 @@ make_metric_from_address!(DWT_CYCCNT: i8 @ 0xE0001004, "DWT_CYCCNT");
 fn main() -> ! {
     defmt::println!("Running...");
 
-    let mut my_base_ptr = make_ptr!(MY_BASE_PTR).unwrap();
+    let mut my_base_ptr = make_ptr!(BASE_THING).unwrap();
     let mut base_thing: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
     my_base_ptr.set(&base_thing as *const _ as u32); // Ensure this is something that will effectivly live as long as this or any depending values will be plotted
 
-    make_metric_from_base_with_offset!(root.path.child: u8 @ BASE_THING + 3, "root_path_child");
+    make_metric_from_base_with_offset!(root.path.child: u8 @ BASE_THING + 3, "root.path.child");
 
     let mut sawtooth = make_metric!(SAWTOOTH: i32 = 42, "(SAWTOOTH / 10) % 100").unwrap();
     //defmt::println!("sawtooth initialized to: {}", sawtooth.get());

@@ -15,7 +15,7 @@ pub enum Address {
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq)]
-#[serde(tag = "type")]
+//#[serde(tag = "type")]
 pub enum Symbol {
     Metric {
         name: String,
@@ -59,10 +59,10 @@ impl Symbol {
 }
 
 #[derive(Debug)]
-pub struct InvalidSymbolError;
+pub struct InvalidSymbolError(#[allow(dead_code)] serde_json::Error);
 
 impl Symbol {
     pub fn demangle(raw: &str) -> Result<Self, InvalidSymbolError> {
-        serde_json::from_str(raw).map_err(|_| InvalidSymbolError)
+        serde_json::from_str(raw).map_err(|e| InvalidSymbolError(e))
     }
 }

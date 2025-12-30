@@ -5,11 +5,12 @@ use probe_plotter_common::{
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
-    LitStr, Token,
+    Token,
     parse::{self, Parse, ParseStream},
     parse_macro_input,
-    spanned::Spanned,
 };
+
+use crate::{parse_expr_str, parse_name};
 
 pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as Args);
@@ -43,15 +44,7 @@ pub(crate) struct Args {
 
 impl Parse for Args {
     fn parse(input: ParseStream) -> parse::Result<Self> {
-        let name =
-            syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
-        let name_span = name.span();
-        let name = name
-            .iter()
-            .map(|s| s.to_string())
-            .collect::<Vec<_>>()
-            .join(".");
-        let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
+        let (static_name, name, name_span) = parse_name(&input)?;
 
         let _colon: Token![:] = input.parse()?;
         let ty = input.parse()?;
@@ -59,14 +52,7 @@ impl Parse for Args {
         let address: syn::LitInt = input.parse()?;
         let address = address.base10_parse()?;
 
-        let comma: parse::Result<Token![,]> = input.parse();
-        let expression_string = input.parse();
-
-        let expression_string = match (comma, expression_string) {
-            (Ok(_), Ok(expr)) => expr,
-            (Ok(_), Err(e)) => return Err(e),
-            (Err(_), _) => LitStr::new(&name, name_span),
-        };
+        let expression_string = parse_expr_str(&input, &name, name_span)?;
 
         Ok(Args {
             name,
