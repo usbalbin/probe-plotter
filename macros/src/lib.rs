@@ -2,15 +2,20 @@
 
 extern crate proc_macro;
 
-use proc_macro::{TokenStream};
-use syn::{spanned::Spanned};
+use proc_macro::TokenStream;
+use proc_macro2::Span;
+use syn::{
+    Token,
+    parse::{self, ParseStream},
+    spanned::Spanned,
+};
 
 mod cargo;
-mod ptr;
-mod setting;
 mod metric;
 mod metric_from_address;
 mod metric_from_base_with_offset;
+mod ptr;
+mod setting;
 
 /// Create a Metric instance that will be shown in the probe-plotter utility's graph
 ///
@@ -56,11 +61,11 @@ pub fn make_ptr(args: TokenStream) -> TokenStream {
 
 /// Tell probe-plotter-tools about an existing value at the provided address
 /// which should be shown as a metric.
-/// 
+///
 /// # NOTE:
 /// unlike the regular [make_metric], this macro will not return a `Metric` object. The host
 /// will see the value as is in memory with no need to manually set it as with `Metric::set`.
-/// 
+///
 /// Due to this, the optimizer may in some cases, especially if non-volatile stores are used,
 /// decide to remove stores to the address specified. The host will then not see those writes.
 ///
@@ -76,10 +81,10 @@ pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
 ///
 /// ```rust
 /// let some_address: *const u8 = *const 0x1234;
-/// let mut my_ptr_metric = probe_plotter::make_ptr(MY_PTR_METRIC);
+/// let mut my_ptr_metric = probe_plotter::make_ptr(MY_PTR_METRIC).unwrap();
 /// my_ptr_metric.set(some_address);
 /// probe_plotter::make_metric_from_address_with_offset(root.path.child: u8 @ MY_PTR_METRIC + 42, "3 * root.path.child");
-/// // The address of the metric `root.path.child` will be 0x1234 + 42 
+/// // The address of the metric `root.path.child` will be 0x1234 + 42
 /// ```
 #[proc_macro]
 pub fn make_metric_from_base_with_offset(args: TokenStream) -> TokenStream {
@@ -117,4 +122,19 @@ fn expr_to_float_lit(e: syn::Expr) -> Result<syn::LitFloat, syn::Error> {
         },
         x => return Err(syn::Error::new(x.span(), error_msg)),
     })
+}
+
+/// (static_name, name, name_span)
+pub(crate) fn parse_name(input: &ParseStream) -> parse::Result<(syn::Ident, String, Span)> {
+    let name =
+        syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
+    let name_span = name.span();
+    let name = name
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join(".");
+    let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
+
+    Ok((static_name, name, name_span))
 }

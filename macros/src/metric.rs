@@ -1,23 +1,28 @@
-use probe_plotter_common::{PrimitiveType, symbol::Symbol};
+use probe_plotter_common::symbol::Symbol;
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{LitStr, Token, parse::{self, Parse, ParseStream}, parse_macro_input};
+use syn::{
+    LitStr, Token,
+    parse::{self, Parse, ParseStream},
+    parse_macro_input,
+};
 
 pub fn make_metric(args: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as MetricArgs);
+    let args = parse_macro_input!(args as Args);
     metric_helper(args)
 }
 
-pub(crate) fn metric_helper(args: MetricArgs) -> TokenStream {
-    let sym_name = serde_json::to_string(&Symbol::Metric{
-        ty: args.ty,
+pub(crate) fn metric_helper(args: Args) -> TokenStream {
+    let sym_name = serde_json::to_string(&Symbol::Metric {
+        ty: args.ty.to_string().as_str().try_into().unwrap(),
         name: args.name.to_string(),
         expr: args.expression_string.map(|x| x.value()),
         address: probe_plotter_common::symbol::Address::Symbols,
-    }).unwrap();
+    })
+    .unwrap();
 
     let name = args.name;
-    let ty = args.ty.to_string();
+    let ty = args.ty;
     let initial_value = args.initial_val;
 
     quote!(
@@ -46,14 +51,14 @@ pub(crate) fn metric_helper(args: MetricArgs) -> TokenStream {
 
 //FOO: i32 = 0, "x * 3.0"
 //FOO: i32 = 0 // defaults to "x"
-pub(crate) struct MetricArgs {
+pub(crate) struct Args {
     pub(crate) name: syn::Ident,
-    pub(crate) ty: PrimitiveType,
+    pub(crate) ty: syn::Ident,
     pub(crate) initial_val: syn::Expr,
     pub(crate) expression_string: Option<syn::LitStr>,
 }
 
-impl Parse for MetricArgs {
+impl Parse for Args {
     fn parse(input: ParseStream) -> parse::Result<Self> {
         let name: syn::Ident = input.parse()?;
         let _comma: Token![:] = input.parse()?;

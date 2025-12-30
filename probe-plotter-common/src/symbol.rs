@@ -8,10 +8,10 @@ pub enum Address {
     Symbols,
 
     /// Override address with a hardcoded address
-    Hardcoded{ address: u64 },
+    Hardcoded { address: u64 },
 
     /// Override address with the value specified in metric `base_metric_name` with `offset`
-    RelativeBaseMetricWithOffset{base_metric: String, offset: u64 },
+    RelativeBaseMetricWithOffset { base_metric: String, offset: u64 },
 }
 
 #[derive(serde::Serialize, serde::Deserialize, PartialEq)]

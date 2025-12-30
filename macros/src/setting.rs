@@ -1,4 +1,4 @@
-use probe_plotter_common::{PrimitiveType, symbol::Symbol};
+use probe_plotter_common::symbol::Symbol;
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{
@@ -13,7 +13,7 @@ pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as SettingArgs);
 
     let sym_name = serde_json::to_string(&Symbol::Setting {
-        ty: args.ty,
+        ty: args.ty.to_string().as_str().try_into().unwrap(),
         name: args.name.to_string(),
         range: args.range_start.base10_parse().unwrap()..=args.range_end.base10_parse().unwrap(),
         step_size: args.step_size.base10_parse().unwrap(),
@@ -21,7 +21,7 @@ pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
     .unwrap();
 
     let name = args.name;
-    let ty = args.ty.to_string();
+    let ty = args.ty;
     let initial_value = args.initial_val;
 
     quote!(
@@ -56,7 +56,7 @@ pub(crate) fn make_setting(args: TokenStream) -> TokenStream {
 // TODO Implement the defaults
 pub(crate) struct SettingArgs {
     pub(crate) name: syn::Ident,
-    pub(crate) ty: PrimitiveType,
+    pub(crate) ty: syn::Ident,
     pub(crate) initial_val: syn::Expr,
     pub(crate) range_start: syn::LitFloat,
     pub(crate) range_end: syn::LitFloat,

@@ -12,7 +12,7 @@ use syn::{
 };
 
 pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as FooArgs);
+    let args = parse_macro_input!(args as Args);
 
     let sym_name = serde_json::to_string(&Symbol::Metric {
         ty: args.ty,
@@ -33,7 +33,7 @@ pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
 }
 
 // root.child.leaf: i8 @ 0x1234, "root.child.leaf"
-pub(crate) struct FooArgs {
+pub(crate) struct Args {
     pub(crate) name: String,
     pub(crate) ty: PrimitiveType,
     pub(crate) address: u64,
@@ -41,7 +41,7 @@ pub(crate) struct FooArgs {
     pub(crate) static_name: syn::Ident,
 }
 
-impl Parse for FooArgs {
+impl Parse for Args {
     fn parse(input: ParseStream) -> parse::Result<Self> {
         let name =
             syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
@@ -68,7 +68,7 @@ impl Parse for FooArgs {
             (Err(_), _) => LitStr::new(&name, name_span),
         };
 
-        Ok(FooArgs {
+        Ok(Args {
             name,
             ty,
             address,
