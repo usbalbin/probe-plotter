@@ -3375,6 +3375,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07e28edb80900c19c28f1072f2e8aeca7fa06b23cd4169cefe1af5aa3260783f"
 
 [[package]]
+name = "gimli"
+version = "0.32.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
+dependencies = [
+ "fallible-iterator",
+ "indexmap",
+ "stable_deref_trait",
+]
+
+[[package]]
 name = "gl_generator"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5821,17 +5832,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "probe-plotter-common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "shunting",
+ "syn 2.0.104",
+]
+
+[[package]]
 name = "probe-plotter-tools"
 version = "0.1.0"
 dependencies = [
  "defmt",
  "defmt-decoder",
  "defmt-parser",
+ "gimli 0.32.3",
  "goblin",
  "mimalloc",
  "object 0.37.2",
+ "probe-plotter-common",
  "probe-rs",
  "rerun",
+ "rustc-demangle",
  "serde",
  "serde_json",
  "shunting",

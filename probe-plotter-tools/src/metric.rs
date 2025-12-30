@@ -1,13 +1,13 @@
 use shunting::MathContext;
 use std::fmt;
 
-use crate::{Type, read_value};
+use crate::{Address, Type, read_value};
 
 pub struct Metric {
     pub name: String,
-    pub expr: shunting::RPNExpr,
+    pub expr: Option<shunting::RPNExpr>,
     pub ty: Type,
-    pub address: u64,
+    pub address: Address,
     pub last_value: f64,
 }
 
@@ -33,20 +33,38 @@ impl Metric {
         core: &mut probe_rs::Core,
         math_ctx: &mut MathContext,
     ) -> Result<(), probe_rs::Error> {
-        let x = read_value(core, self.address, self.ty)?;
+        let address = match &self.address {
+            Address::Fixed(a) => *a,
+            Address::BaseWithOffset {
+                base_expression,
+                offset,
+            } => {
+                let Ok(a) = math_ctx.eval(&base_expression) else {
+                    // Address not yet available
+                    return Ok(());
+                };
+                a as u64 + offset
+            }
+        };
+
+        let x = read_value(core, address, self.ty)?;
         math_ctx.setvar(&self.name, shunting::MathOp::Number(x));
 
         Ok(())
     }
 
-    pub fn compute(&mut self, math_ctx: &mut MathContext) -> (f64, Status) {
-        let new = math_ctx.eval(&self.expr).unwrap();
+    pub fn compute(&mut self, math_ctx: &mut MathContext) -> Option<(f64, Status)> {
+        let Some(expr) = &self.expr else {
+            return None;
+        };
+
+        let new = math_ctx.eval(expr).unwrap();
         let status = if new == self.last_value {
             Status::SameAsLast
         } else {
             Status::New
         };
         self.last_value = new;
-        (new, status)
+        Some((new, status))
     }
 }

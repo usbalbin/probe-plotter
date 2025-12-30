@@ -1,22 +1,34 @@
 pub mod gui;
 pub mod metric;
 pub mod setting;
-pub mod symbol;
 
 use std::{io::Read, sync::mpsc, time::Duration};
 
 use defmt_decoder::DecodeError;
 use defmt_parser::Level;
 use object::{Object, ObjectSymbol};
+use probe_plotter_common::{
+    PrimitiveType,
+    symbol::{self, Symbol},
+};
 use probe_rs::{
     Core, MemoryInterface,
     rtt::{self, ChannelMode, Rtt},
 };
 use rerun::TextLogLevel;
-use serde::Deserialize;
-use shunting::{MathContext, ShuntingParser};
+use shunting::{MathContext, RPNExpr, ShuntingParser};
 
-use crate::{metric::Metric, setting::Setting, symbol::Symbol};
+use crate::{metric::Metric, setting::Setting};
+
+#[derive(Debug)]
+pub enum Address {
+    Fixed(u64),
+    /// `base_expression` expression to calculate the address
+    BaseWithOffset {
+        base_expression: RPNExpr,
+        offset: u64,
+    },
+}
 
 pub fn read_value(core: &mut Core, address: u64, ty: Type) -> Result<f64, probe_rs::Error> {
     let x = match ty {
@@ -34,17 +46,80 @@ pub fn read_value(core: &mut Core, address: u64, ty: Type) -> Result<f64, probe_
     Ok(x)
 }
 
-#[allow(non_camel_case_types)]
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Hash, Eq)]
-pub enum Type {
-    u8,
-    u16,
-    u32,
-    i8,
-    i16,
-    i32,
-    f32,
-}
+pub type Type = PrimitiveType;
+/*
+// From https://github.com/gimli-rs/gimli/blob/master/crates/examples/src/bin/simple.rs
+mod from_gimli_example {
+    use std::{borrow, error};
+
+    use gimli::{DebugInfoUnitHeadersIter, RunTimeEndian};
+    use object::{Object as _, ObjectSection as _};
+
+    // This is a simple wrapper around `object::read::RelocationMap` that implements
+    // `gimli::read::Relocate` for use with `gimli::RelocateReader`.
+    // You only need this if you are parsing relocatable object files.
+    #[derive(Debug, Default)]
+    pub struct RelocationMap(object::read::RelocationMap);
+
+    impl<'a> gimli::read::Relocate for &'a RelocationMap {
+        fn relocate_address(&self, offset: usize, value: u64) -> gimli::Result<u64> {
+            Ok(self.0.relocate(offset as u64, value))
+        }
+
+        fn relocate_offset(&self, offset: usize, value: usize) -> gimli::Result<usize> {
+            <usize as gimli::ReaderOffset>::from_u64(self.0.relocate(offset as u64, value as u64))
+        }
+    }
+
+    // The section data that will be stored in `DwarfSections` and `DwarfPackageSections`.
+    #[derive(Default)]
+    pub struct Section<'data> {
+        data: borrow::Cow<'data, [u8]>,
+        relocations: RelocationMap,
+    }
+
+    // The reader type that will be stored in `Dwarf` and `DwarfPackage`.
+    // If you don't need relocations, you can use `gimli::EndianSlice` directly.
+    pub type Reader<'data> = gimli::RelocateReader<
+        gimli::EndianSlice<'data, gimli::RunTimeEndian>,
+        &'data RelocationMap,
+    >;
+
+    fn get_units<'a>(
+        object: &'a object::File,
+        dwp_object: object::File,
+    ) -> DebugInfoUnitHeadersIter<Reader<'a>> {
+        // Load a `Section` that may own its data.
+        fn load_section<'data>(
+            object: &object::File<'data>,
+            name: &str,
+        ) -> Result<Section<'data>, Box<dyn error::Error>> {
+            Ok(match object.section_by_name(name) {
+                Some(section) => Section {
+                    data: section.uncompressed_data()?,
+                    relocations: section.relocation_map().map(RelocationMap)?,
+                },
+                None => Default::default(),
+            })
+        }
+
+        // Borrow a `Section` to create a `Reader`.
+        fn borrow_section<'data>(
+            section: &'data Section<'data>,
+            endian: gimli::RunTimeEndian,
+        ) -> Reader<'data> {
+            let slice = gimli::EndianSlice::new(borrow::Cow::as_ref(&section.data), endian);
+            gimli::RelocateReader::new(slice, &section.relocations)
+        }
+
+        // Load all of the sections.
+        let dwarf =
+            gimli::Dwarf::load(|id| load_section(object, id.name())).unwrap();
+gimli::Reader
+        // Iterate over the compilation units.
+        dwarf.units()
+    }
+}*/
 
 // Most of this is taken from https://github.com/knurling-rs/defmt/blob/8e517f8d7224237893e39337a61de8ef98b341f2/decoder/src/elf2table/mod.rs and modified
 pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
@@ -57,15 +132,20 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
 
     for entry in elf.symbols() {
         let Ok(name) = entry.name() else {
+            eprintln!("Failed to get name of symbol: {entry:?}");
             continue;
         };
+
+        let name = rustc_demangle::demangle(name).to_string();
+
+        eprintln!("symbol: {name:?}: {entry:?}");
 
         if name == "_SEGGER_RTT" {
             scan_region = rtt::ScanRegion::Exact(entry.address());
             continue;
         }
 
-        let sym = match Symbol::demangle(name) {
+        let sym = match Symbol::demangle(&name) {
             Ok(sym) => sym,
             Err(e) => {
                 if name.contains(r#""name":"#) {
@@ -75,26 +155,45 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             }
         };
 
-        let do_math = |name, expr_str| {
-            let expr = ShuntingParser::parse_str(expr_str).unwrap();
-            let math_ctx = MathContext::new();
-            math_ctx.setvar(name, shunting::MathOp::Number(0.0));
-            math_ctx
-                .eval(&expr)
-                .expect(&format!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
-            expr
+        let do_math = |name, expr_str| match expr_str {
+            Some(expr_str) => {
+                let expr = ShuntingParser::parse_str(expr_str).unwrap();
+                let math_ctx = MathContext::new();
+                math_ctx.setvar(name, shunting::MathOp::Number(0.0));
+                math_ctx
+                    .eval(&expr)
+                    .expect(&format!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
+                Some(expr)
+            }
+            None => None,
         };
 
         // TODO: Why does this assert not succeed?
         //assert_eq!(entry.size(), 4);
         match sym {
-            Symbol::Metric { name, expr, ty } => {
-                let expr = do_math(&name, &expr);
+            Symbol::Metric {
+                name,
+                expr,
+                ty,
+                address,
+            } => {
+                let expr = do_math(&name, expr.as_deref());
+                let address = match address {
+                    symbol::Address::Symbols => Address::Fixed(entry.address()),
+                    symbol::Address::Hardcoded { address } => Address::Fixed(address),
+                    symbol::Address::RelativeBaseMetricWithOffset {
+                        base_metric,
+                        offset,
+                    } => Address::BaseWithOffset {
+                        base_expression: ShuntingParser::parse_str(&base_metric).unwrap(),
+                        offset,
+                    },
+                };
                 metrics.push(Metric {
                     name,
                     expr,
                     ty,
-                    address: entry.address(),
+                    address,
                     last_value: f64::NAN,
                 });
             }
@@ -112,45 +211,6 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
                     range,
                     step_size,
                 });
-            }
-            Symbol::Foo {
-                name,
-                expr,
-                ty,
-                address,
-            } => {
-                let expr = do_math(&name, &expr);
-                metrics.push(Metric {
-                    name,
-                    expr,
-                    ty,
-                    address: address,
-                    last_value: f64::NAN,
-                });
-            }
-            Symbol::Bar {
-                name,
-                expr,
-                ty,
-                base_symbol,
-                offset,
-            } => {
-                // This will be O(n^2), should probably use a hashmap or something to bring it down
-                if let Some(base) = elf.symbols().find(|entry| entry.name() == Ok(&base_symbol)) {
-                    let base_address = base.address();
-                    let expr = do_math(&name, &expr);
-                    metrics.push(Metric {
-                        name,
-                        expr,
-                        ty,
-                        address: base_address + offset,
-                        last_value: f64::NAN,
-                    });
-                } else {
-                    eprintln!(
-                        "Could not find base symbol {base_symbol:?} when parsing 'bar' metric {name:?}"
-                    );
-                }
             }
         }
     }
@@ -293,8 +353,9 @@ pub fn probe_background_thread(
 
         for m in &mut metrics {
             m.read(&mut core, &mut math_ctx).unwrap();
-            let (x, _s) = m.compute(&mut math_ctx);
-            rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
+            if let Some((x, _s)) = m.compute(&mut math_ctx) {
+                rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
+            }
         }
         std::thread::sleep(update_rate);
     }
