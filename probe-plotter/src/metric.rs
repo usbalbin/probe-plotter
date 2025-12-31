@@ -37,7 +37,7 @@ unsafe impl<T> Sync for Metric<T> where T: Sync + Metricable {}
 /// Check the documentation for that lib for the syntax to use.
 impl<T: Metricable> Metric<T> {
     /// # Safety
-    /// Internal use only by [make_metric]
+    /// Internal use only by [make_metric] macro and friends.
     pub const unsafe fn new(x: *mut T) -> Self {
         Metric { x }
     }
