@@ -28,6 +28,7 @@ pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
     quote! {
         #[used]
         #[unsafe(export_name = #sym_name)]
+        #[allow(non_upper_case_globals)]
         static #static_name: u8 = 0;
     }
     .into()

@@ -31,6 +31,7 @@ pub(crate) fn metric_helper(args: Args) -> TokenStream {
         cortex_m::interrupt::free(|_| {
             #[used]
             #[unsafe(export_name = #sym_name)]
+            #[allow(non_upper_case_globals)]
             static mut #static_name: (#ty, bool) =
                 (0, false);
 
