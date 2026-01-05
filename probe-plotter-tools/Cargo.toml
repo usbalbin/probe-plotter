@@ -22,3 +22,6 @@ mimalloc = "0.1.43"
 shunting = { git = "https://github.com/usbalbin/tox", branch = "add-ln" }
 defmt-decoder = "1.0.0"
 defmt-parser = "1.0.0"
+rustc-demangle = "0.1.26"
+gimli = "0.32.3"
+probe-plotter-common = { path = "../probe-plotter-common" }

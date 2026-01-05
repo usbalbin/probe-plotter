@@ -18,7 +18,7 @@ fn main() {
 
     let (mut metrics, _settings, _) = parse_elf_file(&elf_path);
     for m in &metrics {
-        println!("{}: {}", m.name, m.address);
+        println!("{}: {:?}", m.name, m.address);
     }
 
     println!();
@@ -33,11 +33,12 @@ fn main() {
     loop {
         for m in &mut metrics {
             m.read(&mut core, &mut math_ctx).unwrap();
-            let (x, s) = m.compute(&mut math_ctx);
-            if let Status::New = s {
-                rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
-            } else {
-                std::thread::sleep(Duration::from_millis(1));
+            if let Some((x, s)) = m.compute(&mut math_ctx) {
+                if let Status::New = s {
+                    rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
+                } else {
+                    std::thread::sleep(Duration::from_millis(1));
+                }
             }
         }
     }

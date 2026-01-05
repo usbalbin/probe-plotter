@@ -1,17 +1,21 @@
 // Based on defmt and cortex_m::singleton
 
 extern crate proc_macro;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
-use proc_macro::{Span, TokenStream};
-use quote::quote;
-use syn::parse_macro_input;
+use probe_plotter_common::strip_dots;
+use proc_macro::TokenStream;
+use proc_macro2::Span;
+use syn::{
+    Token,
+    parse::{self, ParseStream},
+    spanned::Spanned,
+};
 
-use crate::symbol::{MetricsSymbol, SettingSymbol};
-
-mod args;
-mod cargo;
-mod symbol;
+mod metric;
+mod metric_from_address;
+mod metric_from_base_with_offset;
+mod ptr;
+mod setting;
 
 /// Create a Metric instance that will be shown in the probe-plotter utility's graph
 ///
@@ -28,40 +32,7 @@ mod symbol;
 /// ```
 #[proc_macro]
 pub fn make_metric(args: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as args::MetricArgs);
-
-    let sym_name = MetricsSymbol::new(
-        args.ty.to_string(),
-        args.name.to_string(),
-        args.expression_string.value(),
-    )
-    .mangle();
-
-    let name = args.name;
-    let ty = args.ty;
-    let initial_value = args.initial_val;
-
-    quote!(
-        cortex_m::interrupt::free(|_| {
-            #[unsafe(export_name = #sym_name)]
-            static mut #name: (#ty, bool) =
-                (0, false);
-
-            #[allow(unsafe_code)]
-            let used = unsafe { #name.1 };
-            if used {
-                None
-            } else {
-                #[allow(unsafe_code)]
-                unsafe {
-                    #name.1 = true;
-                    #name.0 = #initial_value;
-                    Some(::probe_plotter::Metric::new(&mut #name.0))
-                }
-            }
-        })
-    )
-    .into()
+    metric::make_metric(args)
 }
 
 /// Create a Setting instance that will be shown as a slider in the probe-plotter utility
@@ -79,52 +50,106 @@ pub fn make_metric(args: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro]
 pub fn make_setting(args: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as args::SettingArgs);
+    setting::make_setting(args)
+}
 
-    let sym_name = SettingSymbol::new(
-        args.ty.to_string(),
-        args.name.to_string(),
-        args.range_start.base10_parse().unwrap()..=args.range_end.base10_parse().unwrap(),
-        args.step_size.base10_parse().unwrap(),
-    )
-    .mangle();
+/// See [make_metric_from_base_with_offset] for more info
+#[proc_macro]
+pub fn make_ptr(args: TokenStream) -> TokenStream {
+    ptr::make_ptr(args)
+}
 
-    let name = args.name;
-    let ty = args.ty;
-    let initial_value = args.initial_val;
+/// Tell probe-plotter-tools about an existing value at the provided address
+/// which should be shown as a metric.
+///
+/// # NOTE:
+/// unlike the regular [make_metric], this macro will not return a `Metric` object. The host
+/// will see the value as is in memory with no need to manually set it as with `Metric::set`.
+///
+/// Due to this, the optimizer may in some cases, especially if non-volatile stores are used,
+/// decide to remove stores to the address specified. The host will then not see those writes.
+///
+/// ```rust
+/// probe_plotter::make_metric_from_address(root.path.child: u8 @ 0x1234, "3 * root.path.child");
+/// ```
+#[proc_macro]
+pub fn make_metric_from_address(args: TokenStream) -> TokenStream {
+    metric_from_address::make_metric_from_address(args)
+}
 
-    quote!(
-        cortex_m::interrupt::free(|_| {
-            #[unsafe(export_name = #sym_name)]
-            static mut #name: (#ty, bool) =
-                (0, false);
+/// Tell probe-plotter-tools about an existing value at a relative offset with an other metrics value as base
+///
+/// ```rust
+/// let some_address: *const u8 = *const 0x1234;
+/// let mut my_ptr_metric = probe_plotter::make_ptr(MY_PTR_METRIC).unwrap();
+/// my_ptr_metric.set(some_address);
+/// probe_plotter::make_metric_from_address_with_offset(root.path.child: u8 @ MY_PTR_METRIC + 42, "3 * root.path.child");
+/// // The address of the metric `root.path.child` will be 0x1234 + 42
+/// ```
+#[proc_macro]
+pub fn make_metric_from_base_with_offset(args: TokenStream) -> TokenStream {
+    metric_from_base_with_offset::make_metric_from_base_with_offset(args)
+}
 
-            #[allow(unsafe_code)]
-            let used = unsafe { #name.1 };
-            if used {
-                None
-            } else {
-                #[allow(unsafe_code)]
-                unsafe {
-                    #name.1 = true;
-                    #name.0 = #initial_value;
-                    Some(::probe_plotter::Setting::new(&mut #name.0))
+// TODO: Clean up this mess
+fn expr_to_float_lit(e: syn::Expr) -> Result<syn::LitFloat, syn::Error> {
+    let error_msg = "expected float or int literal";
+    Ok(match e {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Float(f),
+            ..
+        }) => f,
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(i),
+            ..
+        }) => syn::LitFloat::new(&format!("{}.0", i.base10_digits()), i.span()),
+        syn::Expr::Unary(syn::ExprUnary {
+            op: syn::UnOp::Neg(_),
+            expr,
+            ..
+        }) => match *expr {
+            syn::Expr::Lit(syn::ExprLit { lit, .. }) => match lit {
+                // TODO: Is there a better way to handle the minus sign?
+                syn::Lit::Int(i) => {
+                    syn::LitFloat::new(&format!("-{}.0", i.base10_digits()), i.span())
                 }
-            }
-        })
-    )
-    .into()
+                syn::Lit::Float(f) => {
+                    syn::LitFloat::new(&format!("-{}", f.base10_digits()), f.span())
+                }
+                x => return Err(syn::Error::new(x.span(), error_msg)),
+            },
+            x => return Err(syn::Error::new(x.span(), error_msg)),
+        },
+        x => return Err(syn::Error::new(x.span(), error_msg)),
+    })
 }
 
-pub(crate) fn crate_local_disambiguator() -> u64 {
-    // We want a deterministic, but unique-per-macro-invocation identifier. For that we
-    // hash the call site `Span`'s debug representation, which contains a counter that
-    // should disambiguate macro invocations within a crate.
-    hash(&format!("{:?}", Span::call_site()))
+/// (static_name, name, name_span)
+pub(crate) fn parse_name(input: &ParseStream) -> parse::Result<(syn::Ident, String, Span)> {
+    let name =
+        syn::punctuated::Punctuated::<syn::Ident, Token![.]>::parse_separated_nonempty(input)?;
+    let name_span = name.span();
+    let name = name
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()
+        .join(".");
+    let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
+
+    Ok((static_name, name, name_span))
 }
 
-fn hash(string: &str) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    string.hash(&mut hasher);
-    hasher.finish()
+pub(crate) fn parse_expr_str(
+    input: &ParseStream,
+    name: &str,
+    name_span: Span,
+) -> parse::Result<syn::LitStr> {
+    let comma: parse::Result<Token![,]> = input.parse();
+    let expression_string: parse::Result<syn::LitStr> = input.parse();
+
+    match (comma, expression_string) {
+        (Ok(_), Ok(expr)) => Ok(syn::LitStr::new(&strip_dots(&expr.value()), name_span)),
+        (Ok(_), Err(e)) => Err(e),
+        (Err(_), _) => Ok(syn::LitStr::new(&strip_dots(name), name_span)),
+    }
 }
