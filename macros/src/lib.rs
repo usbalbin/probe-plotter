@@ -150,6 +150,6 @@ pub(crate) fn parse_expr_str(
     match (comma, expression_string) {
         (Ok(_), Ok(expr)) => Ok(syn::LitStr::new(&strip_dots(&expr.value()), name_span)),
         (Ok(_), Err(e)) => Err(e),
-        (Err(_), _) => Ok(syn::LitStr::new(&strip_dots(&name), name_span)),
+        (Err(_), _) => Ok(syn::LitStr::new(&strip_dots(name), name_span)),
     }
 }
