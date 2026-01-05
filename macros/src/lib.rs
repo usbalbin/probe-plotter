@@ -11,7 +11,6 @@ use syn::{
     spanned::Spanned,
 };
 
-mod cargo;
 mod metric;
 mod metric_from_address;
 mod metric_from_base_with_offset;
