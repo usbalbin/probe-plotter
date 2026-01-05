@@ -161,10 +161,10 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
             Some(expr_str) => {
                 let expr = ShuntingParser::parse_str(expr_str).unwrap();
                 let math_ctx = MathContext::new();
-                math_ctx.setvar(&math_ctx_variable_name, shunting::MathOp::Number(0.0));
+                math_ctx.setvar(math_ctx_variable_name, shunting::MathOp::Number(0.0));
                 math_ctx
                     .eval(&expr)
-                    .expect(&format!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
+                    .unwrap_or_else(|_| panic!("For metric: {name}, failed to evaluate {expr:?}, Use the metrics name as name for the value in the expression"));
                 Some(expr)
             }
             None => None,

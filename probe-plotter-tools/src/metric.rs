@@ -41,7 +41,7 @@ impl Metric {
                 base_expression,
                 offset,
             } => {
-                let a = match math_ctx.eval(&base_expression) {
+                let a = match math_ctx.eval(base_expression) {
                     Ok(0.0) => {
                         // Address not yet available
                         return Ok(());
