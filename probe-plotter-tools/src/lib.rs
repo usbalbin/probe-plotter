@@ -374,7 +374,7 @@ pub fn probe_background_thread(
 pub fn receive_defmt_messages<'a>(
     rtt: &mut Rtt,
     core: &mut Core,
-    decoders: &mut Vec<Box<dyn defmt_decoder::StreamDecoder + 'a>>,
+    decoders: &mut Vec<Box<dyn defmt_decoder::StreamDecoder + Send + Sync + 'a>>,
 ) {
     loop {
         let mut has_data = false;
@@ -398,7 +398,7 @@ pub fn receive_defmt_messages<'a>(
 pub fn log_defmt_messages<'a>(
     rec: &rerun::RecordingStream,
     locs: &'a Option<std::collections::BTreeMap<u64, defmt_decoder::Location>>,
-    decoders: &mut Vec<Box<dyn defmt_decoder::StreamDecoder + 'a>>,
+    decoders: &mut Vec<Box<dyn defmt_decoder::StreamDecoder + Send + Sync + 'a>>,
 ) {
     loop {
         let mut has_decoded = false;
