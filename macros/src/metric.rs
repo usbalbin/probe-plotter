@@ -33,7 +33,7 @@ pub(crate) fn metric_helper(args: Args) -> TokenStream {
             #[unsafe(export_name = #sym_name)]
             #[allow(non_upper_case_globals)]
             static mut #static_name: (#ty, bool) =
-                (0, false);
+                (0 as _, false);
 
             #[allow(unsafe_code)]
             let used = unsafe { #static_name.1 };
