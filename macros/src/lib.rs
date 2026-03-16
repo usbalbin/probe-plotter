@@ -134,7 +134,7 @@ pub(crate) fn parse_name(input: &ParseStream) -> parse::Result<(syn::Ident, Stri
         .map(|s| s.to_string())
         .collect::<Vec<_>>()
         .join(".");
-    let static_name = syn::Ident::new(&name.replace('.', "__"), name_span);
+    let static_name = syn::Ident::new(&strip_dots(&name), name_span);
 
     Ok((static_name, name, name_span))
 }
@@ -148,7 +148,7 @@ pub(crate) fn parse_expr_str(
     let expression_string: parse::Result<syn::LitStr> = input.parse();
 
     match (comma, expression_string) {
-        (Ok(_), Ok(expr)) => Ok(syn::LitStr::new(&strip_dots(&expr.value()), name_span)),
+        (Ok(_), Ok(expr)) => Ok(syn::LitStr::new(&expr.value(), name_span)),
         (Ok(_), Err(e)) => Err(e),
         (Err(_), _) => Ok(syn::LitStr::new(&strip_dots(name), name_span)),
     }
