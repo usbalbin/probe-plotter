@@ -52,9 +52,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Listen for gRPC connections from Rerun's logging SDKs.
     // There are other ways of "feeding" the viewer though - all you need is a `re_smart_channel::Receiver`.
-    let (rx, _) = re_grpc_server::spawn_with_recv(
+    let server_options = Default::default();
+    let rx = re_grpc_server::spawn_with_recv(
         "0.0.0.0:9876".parse().unwrap(),
-        "75%".parse().unwrap(),
+        server_options,
         re_grpc_server::shutdown::never(),
     );
 
@@ -98,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let mut rerun_app = re_viewer::App::new(
                 main_thread_token,
                 re_viewer::build_info(),
-                &app_env,
+                app_env,
                 startup_options,
                 cc,
                 None,
