@@ -124,6 +124,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     flashing::ElfLoader(Default::default()),
                     opts
                 );
+                let mut core = session.core(0).unwrap();
+                core.reset().unwrap();
 
                 is_time_to_flash.store(false, Ordering::SeqCst);
             } else {
