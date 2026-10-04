@@ -8,7 +8,7 @@ publish = ["gitea"]
 defmt = "1.0.1"
 goblin = "0.10.0"
 object = "0.37.1"
-probe-rs = "0.29.1"
+probe-rs = { git = "https://github.com/probe-rs/probe-rs" }
 rerun = {  version = "0.30.0", default-features = false, features = [
   "native_viewer",
   "sdk",

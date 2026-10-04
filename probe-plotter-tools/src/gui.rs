@@ -1,8 +1,15 @@
 //! This example shows how to wrap the Rerun Viewer in your own GUI.
 
-use std::sync::mpsc;
+use std::{
+    collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc},
+};
 
-use rerun::external::{eframe, egui, re_memory, re_viewer};
+use probe_rs::flashing::{ProgressEvent, ProgressOperation};
+use rerun::external::{
+    eframe,
+    egui::{self, ProgressBar},
+    re_memory, re_viewer,
+};
 
 use crate::setting::Setting;
 
@@ -15,22 +22,27 @@ static GLOBAL: re_memory::AccountingAllocator<mimalloc::MiMalloc> =
 
 pub struct MyApp {
     rerun_app: re_viewer::App,
-    settings: Vec<Setting>,
+    settings: Arc<Mutex<Vec<Setting>>>,
 
     /// Send settigns here to apply them
     settings_channel: mpsc::Sender<Setting>,
+    flash_progress: Arc<Mutex<FlashProgress>>,
+    is_time_to_flash: Arc<AtomicBool>,
 }
 
 impl MyApp {
     pub fn new(
         rerun_app: re_viewer::App,
-        settings: Vec<Setting>,
+        settings: Arc<Mutex<Vec<Setting>>>,
         settings_channel: mpsc::Sender<Setting>,
+        flash_progress: Arc<Mutex<FlashProgress>>,
+        is_time_to_flash: Arc<AtomicBool>
     ) -> Self {
         Self {
             rerun_app,
             settings,
             settings_channel,
+            flash_progress,is_time_to_flash
         }
     }
 }
@@ -63,7 +75,7 @@ impl MyApp {
         });
         ui.separator();
 
-        for setting in &mut self.settings {
+        for setting in &mut *self.settings.lock().unwrap() {
             if ui
                 .add(
                     egui::Slider::new(&mut setting.value, setting.range.clone())
@@ -74,6 +86,126 @@ impl MyApp {
             {
                 self.settings_channel.send(setting.clone()).unwrap();
             }
+        }
+
+        if !self.is_time_to_flash.load(Ordering::SeqCst) {
+            if ui.button("Flash").clicked() {
+                self.is_time_to_flash.store(true, Ordering::SeqCst);
+            }
+        }
+
+        let flash_progress = self.flash_progress.lock().unwrap();
+
+        for op in [
+            FlashOperation::Fill,
+            FlashOperation::Erase,
+            FlashOperation::Program,
+            FlashOperation::Verify,
+        ] {
+            if let Some(x) = flash_progress.ops.get(&op)
+                && x.started
+            {
+                ui.label(format!("{op:?}: "));
+                ui.add(ProgressBar::new(
+                    x.total.map(|t| x.progress as f32 / t as f32).unwrap_or(0.0),
+                ));
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum FlashOperation {
+    /// Reading back flash contents to restore erased regions that should be kept unchanged.
+    Fill,
+
+    /// Erasing flash sectors.
+    Erase,
+
+    /// Writing data to flash.
+    Program,
+
+    /// Checking flash contents.
+    Verify,
+
+    /// Writing data directly to RAM.
+    Ram,
+}
+
+impl From<probe_rs::flashing::ProgressOperation> for FlashOperation {
+    fn from(value: probe_rs::flashing::ProgressOperation) -> Self {
+        match value {
+            ProgressOperation::Fill => FlashOperation::Fill,
+            ProgressOperation::Erase => FlashOperation::Erase,
+            ProgressOperation::Program => FlashOperation::Program,
+            ProgressOperation::Verify => FlashOperation::Verify,
+            ProgressOperation::Ram => FlashOperation::Ram,
+        }
+    }
+}
+
+pub struct FlashOperationProgress {
+    total: Option<u64>,
+    progress: u64,
+    started: bool,
+}
+
+impl FlashOperationProgress {
+    fn new(total: Option<u64>) -> Self {
+        Self {
+            total,
+            progress: 0,
+            started: false,
+        }
+    }
+}
+
+pub struct FlashProgress {
+    ops: HashMap<FlashOperation, FlashOperationProgress>,
+    err: Option<String>,
+}
+
+impl FlashProgress {
+    pub fn new() -> Self {
+        Self {
+            ops: HashMap::new(),
+            err: None,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.ops.clear();
+        self.err = None;
+    }
+
+    pub fn update(&mut self, evnt: ProgressEvent) {
+        match evnt {
+            ProgressEvent::FlashLayoutReady { .. } => (),
+
+            ProgressEvent::AddProgressBar { operation, total } => {
+                let _ = self
+                    .ops
+                    .insert(operation.into(), FlashOperationProgress::new(total));
+            }
+            ProgressEvent::Started(operation) => {
+                self.ops.get_mut(&operation.into()).unwrap().started = true
+            }
+            ProgressEvent::Progress {
+                operation,
+                size,
+                time: _,
+            } => {
+                self.ops.get_mut(&operation.into()).unwrap().progress = size;
+            }
+
+            ProgressEvent::Failed(e) => {
+                self.err = Some(format!("Flash failed: {e:?}"));
+            }
+            ProgressEvent::Finished(operation) => {
+                let op = self.ops.get_mut(&operation.into()).unwrap();
+                op.progress = op.total.unwrap_or(1);
+            }
+            ProgressEvent::DiagnosticMessage { .. } => (),
         }
     }
 }

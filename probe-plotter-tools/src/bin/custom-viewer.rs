@@ -1,8 +1,18 @@
 // A custom rerun viewer capable of showing and editing settings
 
-use probe_plotter_tools::{gui::MyApp, parse, probe_background_thread, setting::Setting};
-use rerun::external::{eframe, re_crash_handler, re_grpc_server, re_viewer, tokio};
-use std::{env, io::Read, sync::mpsc, thread, time::Duration};
+use probe_plotter_tools::{gui::{FlashProgress, MyApp}, parse, probe_background_thread, setting::Setting};
+use probe_rs::flashing::{self, DownloadOptions};
+use rerun::{
+    RecordingStreamBuilder,
+    external::{eframe, re_crash_handler, re_grpc_server, re_viewer, tokio},
+};
+use std::{
+    env, io::Read, sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    }, thread, time::Duration,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -34,14 +44,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             _ => panic!("Invalid channel_mode. Select one of\n* NoBlockSkip\n* NoBlockTrim\n* BlockIfFull\n\n{help}"),
         });
 
-    let mut elf_bytes = Vec::new();
-    std::fs::File::open(elf_path)
-        .unwrap()
-        .read_to_end(&mut elf_bytes)
-        .unwrap();
-
-    let (metrics, settings, scan_region) = parse(&elf_bytes);
-
     let main_thread_token = rerun::MainThreadToken::i_promise_i_am_on_the_main_thread();
 
     // Direct calls using the `log` crate to stderr. Control with `RUST_LOG=debug` etc.
@@ -54,12 +56,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // There are other ways of "feeding" the viewer though - all you need is a `re_smart_channel::Receiver`.
     let server_options = Default::default();
     let rx = re_grpc_server::spawn_with_recv(
-        "0.0.0.0:9876".parse().unwrap(),
+        "0.0.0.0:9875".parse()?, // Avoid the default port of 9876
         server_options,
         re_grpc_server::shutdown::never(),
     );
 
-    let (settings_update_sender, settings_update_receiver) = mpsc::channel::<Setting>();
+    let (settings_update_sender, mut settings_update_receiver) = mpsc::channel::<Setting>();
 
     let mut native_options = re_viewer::native::eframe_options(None);
     native_options.viewport = native_options.viewport.with_app_id("probe-plotter");
@@ -69,25 +71,66 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // This is used for analytics, if the `analytics` feature is on in `Cargo.toml`
     let app_env = re_viewer::AppEnvironment::Custom("probe-plotter-tools".to_owned());
 
-    let (initial_settings_sender, initial_settings_receiver) = mpsc::channel();
+    let rec = RecordingStreamBuilder::new("probe-plotter")
+        .connect_grpc_opts("rerun+http://0.0.0.0:9875/proxy")?;
+
+    let settings = Arc::new(Mutex::new(Vec::new()));
+    let settings_ = Arc::clone(&settings);
+
+    let is_time_to_flash = Arc::new(AtomicBool::new(false));
+    let is_time_to_flash_ = Arc::clone(&is_time_to_flash);
+    let flash_progress = Arc::new(Mutex::new(FlashProgress::new()));
+    let flash_progress_ = Arc::clone(&flash_progress);
 
     // probe-thread
     thread::spawn(move || {
-        probe_background_thread(
-            update_rate,
-            channel_mode,
-            &target,
-            &elf_bytes,
-            settings,
-            metrics,
-            scan_region,
-            settings_update_receiver,
-            initial_settings_sender,
-        )
-    });
+        loop {
+            let mut elf_bytes = Vec::new();
+            std::fs::File::open(&elf_path)
+                .unwrap()
+                .read_to_end(&mut elf_bytes)
+                .unwrap();
+            let (metrics, parsed_settings, scan_region) = parse(&elf_bytes);
+            dbg!(&scan_region);
+            *settings_.lock().unwrap() = parsed_settings;
 
-    // Receive initial settings from to probe-thread thread
-    let settings = initial_settings_receiver.recv().unwrap();
+            let mut session = probe_rs::Session::auto_attach(&target, Default::default()).unwrap();
+            {
+                let mut core = session.core(0).unwrap();
+                thread::sleep(Duration::from_secs(1));
+
+                probe_background_thread(
+                    &mut core,
+                    update_rate,
+                    channel_mode,
+                    &elf_bytes,
+                    Arc::clone(&settings_),
+                    metrics,
+                    scan_region,
+                    &mut settings_update_receiver,
+                    rec.clone(),
+                    &is_time_to_flash,
+                );
+            }
+
+            if is_time_to_flash.load(Ordering::SeqCst) {
+                flash_progress.lock().unwrap().reset();
+
+                let mut opts = DownloadOptions::new();
+                opts.progress = flashing::FlashProgress::new(|e| flash_progress.lock().unwrap().update(e));
+                let _ = flashing::download_file_with_options(
+                    &mut session,
+                    &elf_path,
+                    flashing::ElfLoader(Default::default()),
+                    opts
+                );
+
+                is_time_to_flash.store(false, Ordering::SeqCst);
+            } else {
+                thread::sleep(Duration::from_secs(1));
+            }
+        }
+    });
 
     let window_title = "probe-plotter";
     eframe::run_native(
@@ -110,6 +153,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 rerun_app,
                 settings,
                 settings_update_sender,
+                flash_progress_,
+                is_time_to_flash_
             )))
         }),
     )?;
