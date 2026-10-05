@@ -1,7 +1,12 @@
 //! This example shows how to wrap the Rerun Viewer in your own GUI.
 
 use std::{
-    collections::HashMap, sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}, mpsc},
+    collections::HashMap,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
 };
 
 use probe_rs::flashing::{ProgressEvent, ProgressOperation};
@@ -36,13 +41,14 @@ impl MyApp {
         settings: Arc<Mutex<Vec<Setting>>>,
         settings_channel: mpsc::Sender<Setting>,
         flash_progress: Arc<Mutex<FlashProgress>>,
-        is_time_to_flash: Arc<AtomicBool>
+        is_time_to_flash: Arc<AtomicBool>,
     ) -> Self {
         Self {
             rerun_app,
             settings,
             settings_channel,
-            flash_progress,is_time_to_flash
+            flash_progress,
+            is_time_to_flash,
         }
     }
 }
@@ -88,10 +94,8 @@ impl MyApp {
             }
         }
 
-        if !self.is_time_to_flash.load(Ordering::SeqCst) {
-            if ui.button("Flash").clicked() {
-                self.is_time_to_flash.store(true, Ordering::SeqCst);
-            }
+        if !self.is_time_to_flash.load(Ordering::SeqCst) && ui.button("Flash").clicked() {
+            self.is_time_to_flash.store(true, Ordering::SeqCst);
         }
 
         let flash_progress = self.flash_progress.lock().unwrap();
@@ -160,6 +164,7 @@ impl FlashOperationProgress {
     }
 }
 
+#[derive(Default)]
 pub struct FlashProgress {
     ops: HashMap<FlashOperation, FlashOperationProgress>,
     err: Option<String>,
@@ -167,10 +172,7 @@ pub struct FlashProgress {
 
 impl FlashProgress {
     pub fn new() -> Self {
-        Self {
-            ops: HashMap::new(),
-            err: None,
-        }
+        Self::default()
     }
 
     pub fn reset(&mut self) {
