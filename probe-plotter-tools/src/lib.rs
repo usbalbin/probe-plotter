@@ -2,7 +2,15 @@ pub mod gui;
 pub mod metric;
 pub mod setting;
 
-use std::{io::Read, sync::mpsc, time::Duration};
+use std::{
+    io::Read,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+        mpsc,
+    },
+    time::Duration,
+};
 
 use defmt_decoder::DecodeError;
 use defmt_parser::Level;
@@ -15,7 +23,7 @@ use probe_rs::{
     Core, MemoryInterface,
     rtt::{self, ChannelMode, Rtt},
 };
-use rerun::TextLogLevel;
+use rerun::{RecordingStream, TextLogLevel};
 use shunting::{MathContext, RPNExpr, ShuntingParser};
 
 use crate::{metric::Metric, setting::Setting};
@@ -138,7 +146,7 @@ pub fn parse(elf_bytes: &[u8]) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRegion) {
 
         let name = rustc_demangle::demangle(name).to_string();
 
-        eprintln!("  {name}");
+        //eprintln!("  {name}");
 
         //eprintln!("symbol: {name:?}: {entry:?}");
 
@@ -252,19 +260,24 @@ pub fn parse_elf_file(elf_path: &str) -> (Vec<Metric>, Vec<Setting>, rtt::ScanRe
 /// * writing updated settings
 #[allow(clippy::too_many_arguments)]
 pub fn probe_background_thread(
+    core: &mut Core<'_>,
     update_rate: Duration,
     channel_mode: Option<ChannelMode>,
-    target: &str,
     elf_bytes: &[u8],
-    mut settings: Vec<Setting>,
+    settings: Arc<Mutex<Vec<Setting>>>,
     mut metrics: Vec<Metric>,
     scan_region: rtt::ScanRegion,
-    settings_update_receiver: mpsc::Receiver<Setting>,
-    initial_settings_sender: mpsc::Sender<Vec<Setting>>,
+    settings_update_receiver: &mut mpsc::Receiver<Setting>,
+    rec: RecordingStream,
+    done: &AtomicBool,
 ) {
-    let mut session = probe_rs::Session::auto_attach(target, Default::default()).unwrap();
-    let mut core = session.core(0).unwrap();
-    let mut rtt = Rtt::attach_region(&mut core, &scan_region).unwrap();
+    let mut rtt = match Rtt::attach_region(core, &scan_region) {
+        Ok(rtt) => rtt,
+        Err(e) => {
+            eprintln!("RTT failed to attach: {e:?}");
+            return;
+        }
+    };
     let table = defmt_decoder::Table::parse(elf_bytes).unwrap().unwrap();
 
     // TODO: Get this to work
@@ -293,10 +306,6 @@ pub fn probe_background_thread(
         format,
         is_timestamp_available: has_timestamp && show_timestamps,
     });*/
-
-    let rec = rerun::RecordingStreamBuilder::new("probe-plotter")
-        .spawn()
-        .unwrap();
 
     let locs = match table.get_locations(elf_bytes) {
         Ok(locs) if locs.is_empty() => {
@@ -333,7 +342,7 @@ pub fn probe_background_thread(
 
     if let Some(channel_mode) = channel_mode {
         for ch in &mut rtt.up_channels {
-            ch.set_mode(&mut core, channel_mode).unwrap();
+            ch.set_mode(core, channel_mode).unwrap();
         }
     }
 
@@ -344,24 +353,21 @@ pub fn probe_background_thread(
         .collect();
 
     // Load initial values from device
-    for setting in &mut settings {
-        setting.read(&mut core).unwrap();
+    for setting in &mut *settings.lock().unwrap() {
+        setting.read(core).unwrap();
     }
 
-    // Send initial settings back to main thread
-    initial_settings_sender.send(settings).unwrap();
-
     let mut math_ctx = MathContext::new();
-    loop {
+    while !done.load(Ordering::SeqCst) {
         for mut setting in settings_update_receiver.try_iter() {
-            setting.write(setting.value, &mut core).unwrap();
+            setting.write(setting.value, core).unwrap();
         }
 
-        receive_defmt_messages(&mut rtt, &mut core, &mut decoders);
+        receive_defmt_messages(&mut rtt, core, &mut decoders);
         log_defmt_messages(&rec, &locs, &mut decoders);
 
         for m in &mut metrics {
-            m.read(&mut core, &mut math_ctx).unwrap();
+            m.read(core, &mut math_ctx).unwrap();
             if let Some((x, _s)) = m.compute(&mut math_ctx) {
                 rec.log(m.name.clone(), &rerun::Scalars::single(x)).unwrap();
             }
@@ -402,7 +408,7 @@ pub fn log_defmt_messages<'a>(
 ) {
     loop {
         let mut has_decoded = false;
-        for decoder in &mut *decoders {
+        for (ch, decoder) in decoders.iter_mut().enumerate() {
             let frame = match decoder.decode() {
                 Ok(f) => f,
                 Err(DecodeError::UnexpectedEof) => continue,
@@ -446,7 +452,10 @@ pub fn log_defmt_messages<'a>(
             };
 
             //let msg = formatter.format_frame(frame, Some(&file), line, module);
-            let msg = format!("{module} :: {} {file}:{line}", frame.display(false));
+            let msg = format!(
+                "[ch{ch}] {module} :: {} {file}:{line}",
+                frame.display(false)
+            );
 
             rec.log("log", &rerun::TextLog::new(msg).with_level(level))
                 .unwrap();
